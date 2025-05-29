@@ -2,7 +2,7 @@
 <a href="https://gdscnitc.in">
 	<img width="800" src="./GDSCNITC.png" alt="GDSC NITC"/>
 </a>
-	<h2 align="center"> < Insert Activity points management system > </h2>
+	<h2 align="center"> < Activity points management system > </h2>
 	<h4 align="center"> < Insert Project Description Here > </h4>
 </p>
 
