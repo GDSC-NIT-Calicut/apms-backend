@@ -41,7 +41,23 @@
 			<img src = "https://yt3.googleusercontent.com/ytc/AIdro_mQRyioMUO4VBrlP-jILdsU6_wMf1KSU9syWtUN4hmK1hg=s900-c-k-c0x00ffffff-no-rj" width="150" height="150" alt="Your Name Here (Insert Your Image Link In Src">
 		</p>
         <p align="center">
-            <a href = "https://github.com/person1">
+            <a href = "https://github.com/gs-725">
+                <img src = "http://www.iconninja.com/files/241/825/211/round-collaboration-social-github-code-circle-network-icon.svg" width="36" height = "36" alt="GitHub"/>
+            </a>
+            <a href = "https://www.linkedin.com/in/person1">
+                <img src = "http://www.iconninja.com/files/863/607/751/network-linkedin-social-connection-circular-circle-media-icon.svg" width="36" height="36" alt="LinkedIn"/>
+            </a>
+        </p>
+		</td>
+	</tr>
+    <tr align="center">
+		<td>
+		yashwant
+		<p align="center">
+			<img src = "https://yt3.googleusercontent.com/ytc/AIdro_mQRyioMUO4VBrlP-jILdsU6_wMf1KSU9syWtUN4hmK1hg=s900-c-k-c0x00ffffff-no-rj" width="150" height="150" alt="Your Name Here (Insert Your Image Link In Src">
+		</p>
+        <p align="center">
+            <a href = "https://github.com/yaswanth230755">
                 <img src = "http://www.iconninja.com/files/241/825/211/round-collaboration-social-github-code-circle-network-icon.svg" width="36" height = "36" alt="GitHub"/>
             </a>
             <a href = "https://www.linkedin.com/in/person1">
