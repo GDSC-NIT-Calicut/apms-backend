@@ -2,8 +2,8 @@
 <a href="https://gdscnitc.in">
 	<img width="800" src="./GDSCNITC.png" alt="GDSC NITC"/>
 </a>
-	<h2 align="center"> < Activity points management system > </h2>
-	<h4 align="center"> < Insert Project Description Here > </h4>
+	<h2 align="center"> APMS : Activity Points Management System</h2>
+	<h4 align="center"> Backend repo for APMS system </h4>
 </p>
 
 ---
