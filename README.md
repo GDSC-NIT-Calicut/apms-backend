@@ -21,10 +21,10 @@
 
 ## 💻 Tech Stack 
 
-- < Typescript>
-- < Node.js>
-- < Express>
-- < PostgreSQL>
+- Typescript
+- Node.js
+- Express JS
+- PostgreSQL
 
 ## 🛠 Dependencies
 - < Dependency 1 >
@@ -34,7 +34,7 @@
 ## CONTRIBUTORS
 
 <table>
-	<tr align="center">
+	<tc align="center">
 		<td>
 		G Soneesh
 		<p align="center">
@@ -49,8 +49,8 @@
             </a>
         </p>
 		</td>
-	</tr>
-    <tr align="center">
+	</tc>
+    <tc align="center">
 		<td>
 		A Yaswanth
 		<p align="center">
@@ -65,6 +65,6 @@
             </a>
         </p>
 		</td>
-	</tr>
+	</tc>
     
 </table>
