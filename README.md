@@ -14,22 +14,32 @@
 
 
 ## ✨ Features
-- [ ]  < Feature 1 >
-- [ ]  < Feature 2 >
-- [ ]  < Feature 3 >
-- [ ]  < Feature 4 >
+- [ ]  User Login
+- [ ]  Submit Activity Points
+- [ ]  Faculty Approval Workflow
+- [ ]  Bulk Point Allocation
+- [ ]  Graduation Eligibility Tracking
+- [ ]  Student-Faculty Mapping
+- [ ]  Role-Based Dashboards
+- [ ]  Point Category Management
 
 ## 💻 Tech Stack 
 
-- Typescript
 - Node.js
-- Express JS
+- Express.js
+- TypeScript
 - PostgreSQL
 
 ## 🛠 Dependencies
-- < Dependency 1 >
-- < Dependency 2 >
-- < Dependency 3 >
+- express
+- pg
+- dotenv
+- typescript
+- @types/node
+- @types/express
+- @types/pg
+- tsx
+- nodemon
 
 ## CONTRIBUTORS
 
