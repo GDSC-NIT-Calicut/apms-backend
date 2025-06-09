@@ -1,17 +1,16 @@
-import express from 'express';
-import dotenv from 'dotenv';
+import app from './app.js';
+import { config } from './config/environment.js';
 
-dotenv.config();
+const PORT = config.port;
 
-const app = express();
-const PORT = process.env.PORT;
-
-app.use(express.json());
-
-app.get('/', (_req, res) => {
-  res.send('Hello from Express + TypeScript + PostgreSQL!');
+const server = app.listen(PORT, () => {
+  console.log('🚀 APMS Backend Server Started');
+  console.log(`📍 Port: ${PORT}`);
+  console.log(`🌍 Environment: ${config.nodeEnv}`);
+  console.log(`🌐 Health Check: http://localhost:${PORT}/health`);
+  console.log(`📚 API Docs: http://localhost:${PORT}/api`);
+  console.log('⚡ Ready to accept connections');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
-});
+//for login take email,passwd and role also(instead of only email and role to allow
+//person with same email to have multiple roles)
