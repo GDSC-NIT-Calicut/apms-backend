@@ -17,7 +17,9 @@
     "isolatedModules": true,
     "noEmit": false,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["express"]
   },
   "include": [
     "src/**/*"
