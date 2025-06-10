@@ -2,6 +2,10 @@ import { Request } from 'express';
 
 export type UserRole = 'student' | 'faculty_advisor' | 'event_organizer' | 'admin';
 
+export function isUserRole(value: any): value is UserRole {
+  return ['student', 'faculty_advisor', 'event_organizer', 'admin'].includes(value);
+}
+
 export interface User {
   user_id: number;
   email: string;
