@@ -1,5 +1,8 @@
-import { Pool } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
+
 import { config } from './environment.js';
+console.log('Postgres config:', config.database);
 
 export const pool = new Pool({
   host: config.database.host,
