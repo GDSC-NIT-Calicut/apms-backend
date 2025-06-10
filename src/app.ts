@@ -3,7 +3,7 @@
   import helmet from 'helmet';
   import morgan from 'morgan';
   import { config } from './config/environment.js';
-  import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+  //import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
   import authRoutes from './routes/authRoutes.js';
   //import userRoutes from './routes/userRoutes';
   // import other routes as needed
@@ -56,6 +56,7 @@
           refresh: 'POST /api/auth/refresh',
           profile: 'GET /api/auth/profile',
           validate: 'GET /api/auth/validate',
+          //also remember upon logout the jwt token must be removed by the frontend or otherwise it will stay there until expiration time 
         },
       //   users: {
       //     list: 'GET /api/users',
@@ -71,9 +72,9 @@
   // app.use('/api/students', studentRoutes); // Add more as needed
 
   // 404 handler
-  app.use('*', notFoundHandler);
+  //app.use('*', notFoundHandler);
 
   // Error handler
-  app.use(errorHandler);
+  //app.use(errorHandler);
 
   export default app;
