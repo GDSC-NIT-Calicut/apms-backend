@@ -89,7 +89,6 @@ CREATE TABLE student_points (
     points INTEGER NOT NULL CHECK (points > 0),
     status submission_status_enum DEFAULT 'PENDING',
     event_date DATE NOT NULL,
-    event_description TEXT,
     submission_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     rejection_reason TEXT DEFAULT NULL,
     -- New field to track resubmission attempts
