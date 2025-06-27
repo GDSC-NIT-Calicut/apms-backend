@@ -25,4 +25,9 @@ export const config = {
   bcrypt: {
     saltRounds: parseInt(process.env.BCRYPT_ROUNDS || '12')
   },
+  hardCodedAdmin: {
+    email: process.env.HARD_CODED_ADMIN_EMAIL!,
+    password: process.env.HARD_CODED_ADMIN_PASSWORD!,
+    name: process.env.HARD_CODED_ADMIN_NAME!,
+  },
 };
