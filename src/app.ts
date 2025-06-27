@@ -63,7 +63,7 @@ import { getUserDetails } from 'controllers/userDetails.js';
           registerevent_organizer:'POST /api/register/event_organizer',
           registeradmin:'POST /api/register/admin',
           login: 'POST /api/auth/login',
-          //logout: 'POST /api/auth/logout',
+          logout: 'POST /api/auth/logout',
           //refresh: 'POST /api/auth/refresh',
           //profile: 'GET /api/auth/profile',
           //validate: 'GET /api/auth/validate',
