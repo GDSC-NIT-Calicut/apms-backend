@@ -5,6 +5,11 @@
   import { config } from './config/environment.js';
   //import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
   import authRoutes from './routes/authRoutes.js';
+  import registerRoutes from './routes/registerRoutes.js';
+  import userDetailsRoutes from './routes/userDetailsRoutes.js';
+  import cookieParser from 'cookie-parser';
+import { register } from 'module';
+import { getUserDetails } from 'controllers/userDetails.js';
   //import userRoutes from './routes/userRoutes';
   // import other routes as needed
 
@@ -15,12 +20,14 @@
 
   // Logging middleware
   app.use(morgan('dev'));
-
+  //cookie parser
+  app.use(cookieParser());
   // CORS configuration
   app.use(cors({
     origin: config.cors.allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   }));
 
   // Body parsing middleware
@@ -50,12 +57,23 @@
       message: 'APMS API v1.0',
       endpoints: {
         auth: {
-          register: 'POST /api/auth/register',
+
+          registerstudent: 'POST /api/register/student',
+          registerfa:'POST /api/register/fa',
+          registerevent_organizer:'POST /api/register/event_organizer',
+          registeradmin:'POST /api/register/admin',
           login: 'POST /api/auth/login',
-          logout: 'POST /api/auth/logout',
-          refresh: 'POST /api/auth/refresh',
-          profile: 'GET /api/auth/profile',
-          validate: 'GET /api/auth/validate',
+          //logout: 'POST /api/auth/logout',
+          //refresh: 'POST /api/auth/refresh',
+          //profile: 'GET /api/auth/profile',
+          //validate: 'GET /api/auth/validate',
+          getUserDetailsforalreadylogineduser: 'GET /api/getuserdetails/me',
+          //we will use local storage for storing jwt and for user who already has valid jwt
+          //this needs to be checked by frontend and is there is no need for user to login again
+          //the frontend can hit this route to get the dashboard data directly without the
+          //user having to reenter their credentials this is valid for goolge o auth also
+          //confirm this
+
           //also remember upon logout the jwt token must be removed by the frontend or otherwise it will stay there until expiration time 
         },
       //   users: {
@@ -67,7 +85,9 @@
   });
 
   // Mount routes
-  app.use('/api/auth', authRoutes);
+  app.use('/api/auth', authRoutes);//later after all routes development change auth to use google o auth
+  app.use('/api/register',registerRoutes);
+  app.use('/api/getuserdetails',userDetailsRoutes);
   //app.use('/api/users', userRoutes);
   // app.use('/api/students', studentRoutes); // Add more as needed
 
