@@ -121,3 +121,19 @@ export interface AllocationCSVRow {
   points: number;
 }
 
+export interface StudentPointRequestInput {
+  event_name: string;
+  event_type: 'institute_level' | 'department_level' | 'fa_assigned';
+  event_date: string;
+  points: number;
+  proof?: Express.Multer.File;
+}
+
+export interface StudentResubmitRequestInput {
+  point_id: number;
+  event_name?: string;
+  event_type?: 'institute_level' | 'department_level' | 'fa_assigned';
+  event_date?: string;
+  points?: number;
+  proof?: Express.Multer.File;
+}
