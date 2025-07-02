@@ -1,13 +1,10 @@
+-- updated resubmission logic for student_points
 -- Drop existing objects in reverse dependency order
 DROP TRIGGER IF EXISTS trigger_update_student_point_totals ON student_points CASCADE;
-DROP TRIGGER IF EXISTS trigger_handle_resubmission ON student_points CASCADE;
 DROP TRIGGER IF EXISTS trg_student_points_category_change ON student_points CASCADE;
-DROP TRIGGER IF EXISTS update_student_points_on_status_change ON student_points CASCADE;
 
 DROP FUNCTION IF EXISTS update_student_point_totals() CASCADE;
-DROP FUNCTION IF EXISTS handle_resubmission() CASCADE;
 DROP FUNCTION IF EXISTS update_student_points_on_category_change() CASCADE;
-DROP FUNCTION IF EXISTS update_student_points_on_status_change() CASCADE;
 
 DROP VIEW IF EXISTS student_eligibility_status CASCADE;
 DROP VIEW IF EXISTS student_submission_history CASCADE;
@@ -104,7 +101,7 @@ CREATE TABLE admins (
     admin_name VARCHAR(255) NOT NULL
 );
 
--- STUDENT_POINTS table
+-- STUDENT_POINTS table (revised)
 CREATE TABLE student_points (
     point_id SERIAL PRIMARY KEY,
     student_roll_number VARCHAR(20) NOT NULL REFERENCES students(roll_number) ON DELETE CASCADE,
@@ -116,8 +113,7 @@ CREATE TABLE student_points (
     event_date DATE NOT NULL,
     submission_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     rejection_reason TEXT DEFAULT NULL,
-    attempt_number INTEGER DEFAULT 1 CHECK (attempt_number > 0),
-    previous_submission_id INTEGER REFERENCES student_points(point_id) ON DELETE SET NULL
+    resubmitted BOOLEAN DEFAULT FALSE
 );
 
 -- Create indexes
@@ -139,7 +135,6 @@ CREATE INDEX idx_student_points_status ON student_points(status);
 CREATE INDEX idx_student_points_event_type ON student_points(event_type);
 CREATE INDEX idx_student_points_event_date ON student_points(event_date);
 CREATE INDEX idx_student_points_submission_date ON student_points(submission_date);
-CREATE INDEX idx_student_points_attempt ON student_points(attempt_number);
 
 -- Unique constraints
 CREATE UNIQUE INDEX unique_approved_points_per_event_per_student
@@ -250,42 +245,7 @@ CREATE TRIGGER trigger_update_student_point_totals
     FOR EACH ROW
     EXECUTE FUNCTION update_student_point_totals();
 
--- 2. Function to handle resubmission
-CREATE OR REPLACE FUNCTION handle_resubmission()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- If this is a resubmission, link to previous submission
-    IF NEW.previous_submission_id IS NULL AND TG_OP = 'INSERT' THEN
-        -- Check for existing submissions for the same event
-        SELECT point_id INTO NEW.previous_submission_id
-        FROM student_points
-        WHERE student_roll_number = NEW.student_roll_number
-          AND event_name = NEW.event_name
-          AND status IN ('PENDING', 'REJECTED')
-        ORDER BY submission_date DESC
-        LIMIT 1;
-        
-        -- Set attempt number
-        IF NEW.previous_submission_id IS NOT NULL THEN
-            SELECT attempt_number + 1 INTO NEW.attempt_number
-            FROM student_points
-            WHERE point_id = NEW.previous_submission_id;
-        ELSE
-            NEW.attempt_number := 1;
-        END IF;
-    END IF;
-    
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger for resubmission
-CREATE TRIGGER trigger_handle_resubmission
-    BEFORE INSERT ON student_points
-    FOR EACH ROW
-    EXECUTE FUNCTION handle_resubmission();
-
--- 3. NEW: Function to handle category changes
+-- 2. Function to handle category changes
 CREATE OR REPLACE FUNCTION update_student_points_on_category_change()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -331,7 +291,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- NEW: Trigger for category changes
+-- Trigger for category changes
 CREATE TRIGGER trg_student_points_category_change
 AFTER UPDATE OF event_type, status ON student_points
 FOR EACH ROW
@@ -368,8 +328,8 @@ SELECT
     sp.status,
     sp.event_date,
     sp.submission_date,
-    sp.attempt_number,
     sp.rejection_reason,
+    sp.resubmitted,
     s.student_name,
     s.department
 FROM student_points sp
