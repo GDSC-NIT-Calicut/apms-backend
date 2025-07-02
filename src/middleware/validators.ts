@@ -143,4 +143,86 @@ export const validateAdminFields = (req: Request, res: Response, next: NextFunct
   next();
 };
 
+// --- Event Organizer: Allocation Validator ---
+export const validateAllocatePointsInput = (req: Request, res: Response, next: NextFunction) => {
+  const { event_name, event_type, event_date } = req.body;
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).json({ message: 'CSV file is required' });
+  }
+  if (!event_name || typeof event_name !== 'string') {
+    return res.status(400).json({ message: 'event_name is required and must be a string' });
+  }
+  if (!event_type || !['institute_level', 'department_level', 'fa_assigned'].includes(event_type)) {
+    return res.status(400).json({ message: 'event_type is required and must be one of: institute_level, department_level, fa_assigned' });
+  }
+  if (!event_date || isNaN(Date.parse(event_date))) {
+    return res.status(400).json({ message: 'event_date is required and must be a valid date string (YYYY-MM-DD)' });
+  }
+  next();
+};
+
+// --- Event Organizer: Reallocate Points Validator ---
+export const validateReallocatePointsInput = (req: Request, res: Response, next: NextFunction) => {
+  const { allocation_id, event_name, event_type, event_date } = req.body;
+  const file = req.file;
+
+  if (!allocation_id || isNaN(Number(allocation_id))) {
+    return res.status(400).json({ message: 'allocation_id is required and must be a number' });
+  }
+  if (!file && !event_name && !event_type && !event_date) {
+    return res.status(400).json({ message: 'At least one of file, event_name, event_type, or event_date must be provided' });
+  }
+  if (event_name && typeof event_name !== 'string') {
+    return res.status(400).json({ message: 'event_name must be a string' });
+  }
+  if (event_type && !['institute_level', 'department_level', 'fa_assigned'].includes(event_type)) {
+    return res.status(400).json({ message: 'event_type must be one of: institute_level, department_level, fa_assigned' });
+  }
+  if (event_date && isNaN(Date.parse(event_date))) {
+    return res.status(400).json({ message: 'event_date must be a valid date string (YYYY-MM-DD)' });
+  }
+  next();
+};
+
+// --- Event Organizer: Update Allocation Details Validator ---
+export const validateUpdateAllocationDetailsInput = (req: Request, res: Response, next: NextFunction) => {
+  const { allocation_id, event_name, event_type, event_date } = req.body;
+
+  if (!allocation_id || isNaN(Number(allocation_id))) {
+    return res.status(400).json({ message: 'allocation_id is required and must be a number' });
+  }
+  if (!event_name && !event_type && !event_date) {
+    return res.status(400).json({ message: 'At least one of event_name, event_type, or event_date must be provided' });
+  }
+  if (event_name && typeof event_name !== 'string') {
+    return res.status(400).json({ message: 'event_name must be a string' });
+  }
+  if (event_type && !['institute_level', 'department_level', 'fa_assigned'].includes(event_type)) {
+    return res.status(400).json({ message: 'event_type must be one of: institute_level, department_level, fa_assigned' });
+  }
+  if (event_date && isNaN(Date.parse(event_date))) {
+    return res.status(400).json({ message: 'event_date must be a valid date string (YYYY-MM-DD)' });
+  }
+  next();
+};
+
+// --- Event Organizer: Revoke Allocation Validator ---
+export const validateRevokeAllocationInput = (req: Request, res: Response, next: NextFunction) => {
+  const { allocation_id } = req.body;
+  if (!allocation_id || isNaN(Number(allocation_id))) {
+    return res.status(400).json({ message: 'allocation_id is required and must be a number' });
+  }
+  next();
+};
+// --- Download Allocation File Validator ---
+export const validateDownloadAllocationFileInput = (req: Request, res: Response, next: NextFunction) => {
+  const { allocation_id } = req.query;
+  if (!allocation_id || isNaN(Number(allocation_id))) {
+    return res.status(400).json({ message: 'allocation_id is required as a query parameter and must be a number' });
+  }
+  next();
+};
+
 
