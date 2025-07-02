@@ -8,6 +8,7 @@
   import registerRoutes from './routes/registerRoutes.js';
   import userDetailsRoutes from './routes/userDetailsRoutes.js';
   import eventOrganizerRoutes from './routes/eventOrganizerRoutes.js';
+  import studentRoutes from './routes/studentRoutes.js';
   import cookieParser from 'cookie-parser';
 import { register } from 'module';
 import { getUserDetails } from 'controllers/userDetails.js';
@@ -70,7 +71,7 @@ if (!existsSync(UPLOADS_DIR)) {
           registerfa:'POST /api/register/fa',
           registerevent_organizer:'POST /api/register/event_organizer',
           registeradmin:'POST /api/register/admin',
-          login: 'POST /api/auth/login',
+          login: 'POST /api/auth/login', //only raw json
           logout: 'POST /api/auth/logout',
           //refresh: 'POST /api/auth/refresh',
           //profile: 'GET /api/auth/profile',
@@ -82,7 +83,14 @@ if (!existsSync(UPLOADS_DIR)) {
           eventOrganizerrevokeallocation:'POST /api/event-organizer/revoke',
           eventOrganizerRoutesviewallocatedallocation:'GET /api/event-organizer/allocations/allocated',
           eventOrganizerRoutesviewrevokedallocation:'GET /api/event-organizer/allocations/revoked',
-          eventorganizergetuploadedfileforallocatedorrevokedallocations:'GET /api/event-organizer/allocations/file'
+          eventorganizergetuploadedfileforallocatedorrevokedallocations:'GET /api/event-organizer/allocations/file',
+          studentsgetapprovedrequest:'GET /api/student/requests/approved',
+          //remember for students the form for submit or resubmit the name of the file section must be proof
+          studentsgetrejectedrequest:'GET /api/student/requests/rejected',
+          studentsgetpendingrequest:'GET /api/student/requests/pending',
+          studentsubmitactivity:'POST /api/student/requests/submit',
+          studentresubmitactivity:'POST /api/student/requests/resubmit',
+          studentviewuploadeddocument:'GET /api/student/requests/proof'
           //we will use local storage for storing jwt and for user who already has valid jwt
           //this needs to be checked by frontend and is there is no need for user to login again
           //the frontend can hit this route to get the dashboard data directly without the
@@ -104,6 +112,7 @@ if (!existsSync(UPLOADS_DIR)) {
   app.use('/api/register',registerRoutes);
   app.use('/api/getuserdetails',userDetailsRoutes);
   app.use('/api/event-organizer', eventOrganizerRoutes);
+  app.use('/api/student', studentRoutes);
   //app.use('/api/users', userRoutes);
   // app.use('/api/students', studentRoutes); // Add more as needed
 
