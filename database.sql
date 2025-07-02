@@ -1,13 +1,27 @@
--- Drop all tables if they exist (in reverse dependency order)
+-- Drop existing objects in reverse dependency order
+DROP TRIGGER IF EXISTS trigger_update_student_point_totals ON student_points CASCADE;
+DROP TRIGGER IF EXISTS trigger_handle_resubmission ON student_points CASCADE;
+DROP TRIGGER IF EXISTS trg_student_points_category_change ON student_points CASCADE;
+DROP TRIGGER IF EXISTS update_student_points_on_status_change ON student_points CASCADE;
+
+DROP FUNCTION IF EXISTS update_student_point_totals() CASCADE;
+DROP FUNCTION IF EXISTS handle_resubmission() CASCADE;
+DROP FUNCTION IF EXISTS update_student_points_on_category_change() CASCADE;
+DROP FUNCTION IF EXISTS update_student_points_on_status_change() CASCADE;
+
+DROP VIEW IF EXISTS student_eligibility_status CASCADE;
+DROP VIEW IF EXISTS student_submission_history CASCADE;
+DROP VIEW IF EXISTS fa_dashboard_enhanced CASCADE;
+
 DROP TABLE IF EXISTS student_points CASCADE;
 DROP TABLE IF EXISTS student_faculty_mapping CASCADE;
+DROP TABLE IF EXISTS event_organizer_allocations CASCADE;
 DROP TABLE IF EXISTS faculty_advisors CASCADE;
 DROP TABLE IF EXISTS event_organizers CASCADE;
 DROP TABLE IF EXISTS admins CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
--- Drop custom types if they exist
 DROP TYPE IF EXISTS user_role_enum CASCADE;
 DROP TYPE IF EXISTS submission_status_enum CASCADE;
 DROP TYPE IF EXISTS point_category_enum CASCADE;
@@ -28,7 +42,7 @@ CREATE TABLE users (
 
 -- STUDENT table
 CREATE TABLE students (
-    roll_number VARCHAR(20) PRIMARY KEY, -- B220123CS format
+    roll_number VARCHAR(20) PRIMARY KEY,
     student_name VARCHAR(255) NOT NULL,
     user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     department VARCHAR(100) NOT NULL,
@@ -38,7 +52,6 @@ CREATE TABLE students (
     institute_level_points INTEGER DEFAULT 0 CHECK (institute_level_points >= 0),
     department_level_points INTEGER DEFAULT 0 CHECK (department_level_points >= 0),
     fa_assigned_points INTEGER DEFAULT 0 CHECK (fa_assigned_points >= 0),
-    -- Enhanced graduation eligibility check (minimum 20 points each from institute and department)
     graduation_eligible BOOLEAN GENERATED ALWAYS AS (
         total_points >= 80 AND 
         institute_level_points >= 20 AND 
@@ -72,6 +85,18 @@ CREATE TABLE event_organizers (
     organization_name VARCHAR(255) NOT NULL
 );
 
+-- EVENT_ORGANIZER_ALLOCATIONS table
+CREATE TABLE event_organizer_allocations (
+    allocation_id SERIAL PRIMARY KEY,
+    organizer_id INTEGER NOT NULL REFERENCES event_organizers(organizer_id) ON DELETE CASCADE,
+    allocation_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    file_path TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('allocated', 'revoked')),
+    event_name VARCHAR(255) NOT NULL,
+    event_type point_category_enum NOT NULL,
+    event_date DATE NOT NULL
+);
+
 -- ADMIN table
 CREATE TABLE admins (
     admin_id SERIAL PRIMARY KEY,
@@ -79,25 +104,23 @@ CREATE TABLE admins (
     admin_name VARCHAR(255) NOT NULL
 );
 
--- STUDENT_POINTS table with resubmission support
+-- STUDENT_POINTS table
 CREATE TABLE student_points (
     point_id SERIAL PRIMARY KEY,
     student_roll_number VARCHAR(20) NOT NULL REFERENCES students(roll_number) ON DELETE CASCADE,
     event_name VARCHAR(255) NOT NULL,
-    event_type point_category_enum NOT NULL, -- institute_level, department_level, fa_assigned
-    proof_document TEXT, -- PDF file path/URL (can be null for admin/organizer allocations)
+    event_type point_category_enum NOT NULL,
+    proof_document TEXT,
     points INTEGER NOT NULL CHECK (points > 0),
     status submission_status_enum DEFAULT 'PENDING',
     event_date DATE NOT NULL,
     submission_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     rejection_reason TEXT DEFAULT NULL,
-    -- New field to track resubmission attempts
     attempt_number INTEGER DEFAULT 1 CHECK (attempt_number > 0),
-    -- Reference to previous submission (for tracking resubmission chain)
     previous_submission_id INTEGER REFERENCES student_points(point_id) ON DELETE SET NULL
 );
 
--- Create indexes for performance
+-- Create indexes
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_students_user_id ON students(user_id);
@@ -118,99 +141,106 @@ CREATE INDEX idx_student_points_event_date ON student_points(event_date);
 CREATE INDEX idx_student_points_submission_date ON student_points(submission_date);
 CREATE INDEX idx_student_points_attempt ON student_points(attempt_number);
 
--- MODIFIED: Unique partial index - only prevents duplicate APPROVED submissions
--- This allows resubmission after rejection
+-- Unique constraints
 CREATE UNIQUE INDEX unique_approved_points_per_event_per_student
 ON student_points(student_roll_number, event_name)
 WHERE status = 'APPROVED';
 
--- NEW: Additional constraint to prevent multiple PENDING submissions for same event
--- This prevents spam submissions while allowing resubmission after rejection
 CREATE UNIQUE INDEX unique_pending_points_per_event_per_student
 ON student_points(student_roll_number, event_name)
 WHERE status = 'PENDING';
 
--- Trigger function to update student points
+-- 1. Function to update student point totals
 CREATE OR REPLACE FUNCTION update_student_point_totals()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF TG_OP = 'INSERT' AND NEW.status = 'APPROVED' THEN
-        -- Add points when new approved record is created
-        UPDATE students 
-        SET 
-            total_points = total_points + NEW.points,
-            institute_level_points = CASE WHEN NEW.event_type = 'institute_level' 
-                THEN institute_level_points + NEW.points ELSE institute_level_points END,
-            department_level_points = CASE WHEN NEW.event_type = 'department_level' 
-                THEN department_level_points + NEW.points ELSE department_level_points END,
-            fa_assigned_points = CASE WHEN NEW.event_type = 'fa_assigned' 
-                THEN fa_assigned_points + NEW.points ELSE fa_assigned_points END
-        WHERE roll_number = NEW.student_roll_number;
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status = 'APPROVED' THEN
+            UPDATE students
+            SET
+                total_points = total_points + NEW.points,
+                institute_level_points = institute_level_points + 
+                    CASE WHEN NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END,
+                department_level_points = department_level_points + 
+                    CASE WHEN NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points + 
+                    CASE WHEN NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END
+            WHERE roll_number = NEW.student_roll_number;
+        END IF;
         
-    ELSIF TG_OP = 'UPDATE' AND OLD.status != 'APPROVED' AND NEW.status = 'APPROVED' THEN
-        -- Add points when status changes to approved
-        UPDATE students 
-        SET 
-            total_points = total_points + NEW.points,
-            institute_level_points = CASE WHEN NEW.event_type = 'institute_level' 
-                THEN institute_level_points + NEW.points ELSE institute_level_points END,
-            department_level_points = CASE WHEN NEW.event_type = 'department_level' 
-                THEN department_level_points + NEW.points ELSE department_level_points END,
-            fa_assigned_points = CASE WHEN NEW.event_type = 'fa_assigned' 
-                THEN fa_assigned_points + NEW.points ELSE fa_assigned_points END
-        WHERE roll_number = NEW.student_roll_number;
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- If status changed from APPROVED to something else
+        IF OLD.status = 'APPROVED' AND NEW.status != 'APPROVED' THEN
+            UPDATE students
+            SET
+                total_points = total_points - OLD.points,
+                institute_level_points = institute_level_points - 
+                    CASE WHEN OLD.event_type = 'institute_level' THEN OLD.points ELSE 0 END,
+                department_level_points = department_level_points - 
+                    CASE WHEN OLD.event_type = 'department_level' THEN OLD.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points - 
+                    CASE WHEN OLD.event_type = 'fa_assigned' THEN OLD.points ELSE 0 END
+            WHERE roll_number = OLD.student_roll_number;
         
-    ELSIF TG_OP = 'UPDATE' AND OLD.status = 'APPROVED' AND NEW.status != 'APPROVED' THEN
-        -- Subtract points when approval is revoked
-        UPDATE students 
-        SET 
-            total_points = total_points - OLD.points,
-            institute_level_points = CASE WHEN OLD.event_type = 'institute_level' 
-                THEN institute_level_points - OLD.points ELSE institute_level_points END,
-            department_level_points = CASE WHEN OLD.event_type = 'department_level' 
-                THEN department_level_points - OLD.points ELSE department_level_points END,
-            fa_assigned_points = CASE WHEN OLD.event_type = 'fa_assigned' 
-                THEN fa_assigned_points - OLD.points ELSE fa_assigned_points END
-        WHERE roll_number = OLD.student_roll_number;
+        -- If status changed to APPROVED
+        ELSIF NEW.status = 'APPROVED' AND OLD.status != 'APPROVED' THEN
+            UPDATE students
+            SET
+                total_points = total_points + NEW.points,
+                institute_level_points = institute_level_points + 
+                    CASE WHEN NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END,
+                department_level_points = department_level_points + 
+                    CASE WHEN NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points + 
+                    CASE WHEN NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END
+            WHERE roll_number = NEW.student_roll_number;
         
-    ELSIF TG_OP = 'UPDATE' AND OLD.status = 'APPROVED' AND NEW.status = 'APPROVED' AND OLD.points != NEW.points THEN
-        -- Handle point value changes for approved records
-        UPDATE students 
-        SET 
-            total_points = total_points - OLD.points + NEW.points,
-            institute_level_points = CASE 
-                WHEN OLD.event_type = 'institute_level' THEN institute_level_points - OLD.points
-                ELSE institute_level_points END +
-                CASE WHEN NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END,
-            department_level_points = CASE 
-                WHEN OLD.event_type = 'department_level' THEN department_level_points - OLD.points
-                ELSE department_level_points END +
-                CASE WHEN NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END,
-            fa_assigned_points = CASE 
-                WHEN OLD.event_type = 'fa_assigned' THEN fa_assigned_points - OLD.points
-                ELSE fa_assigned_points END +
-                CASE WHEN NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END
-        WHERE roll_number = NEW.student_roll_number;
+        -- If points changed while approved
+        ELSIF OLD.status = 'APPROVED' AND NEW.status = 'APPROVED' AND OLD.points != NEW.points THEN
+            -- First remove old points
+            UPDATE students
+            SET
+                total_points = total_points - OLD.points,
+                institute_level_points = institute_level_points - 
+                    CASE WHEN OLD.event_type = 'institute_level' THEN OLD.points ELSE 0 END,
+                department_level_points = department_level_points - 
+                    CASE WHEN OLD.event_type = 'department_level' THEN OLD.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points - 
+                    CASE WHEN OLD.event_type = 'fa_assigned' THEN OLD.points ELSE 0 END
+            WHERE roll_number = OLD.student_roll_number;
+            
+            -- Then add new points
+            UPDATE students
+            SET
+                total_points = total_points + NEW.points,
+                institute_level_points = institute_level_points + 
+                    CASE WHEN NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END,
+                department_level_points = department_level_points + 
+                    CASE WHEN NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points + 
+                    CASE WHEN NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END
+            WHERE roll_number = NEW.student_roll_number;
+        END IF;
         
-    ELSIF TG_OP = 'DELETE' AND OLD.status = 'APPROVED' THEN
-        -- Subtract points when approved record is deleted
-        UPDATE students 
-        SET 
-            total_points = total_points - OLD.points,
-            institute_level_points = CASE WHEN OLD.event_type = 'institute_level' 
-                THEN institute_level_points - OLD.points ELSE institute_level_points END,
-            department_level_points = CASE WHEN OLD.event_type = 'department_level' 
-                THEN department_level_points - OLD.points ELSE department_level_points END,
-            fa_assigned_points = CASE WHEN OLD.event_type = 'fa_assigned' 
-                THEN fa_assigned_points - OLD.points ELSE fa_assigned_points END
-        WHERE roll_number = OLD.student_roll_number;
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        IF OLD.status = 'APPROVED' THEN
+            UPDATE students
+            SET
+                total_points = total_points - OLD.points,
+                institute_level_points = institute_level_points - 
+                    CASE WHEN OLD.event_type = 'institute_level' THEN OLD.points ELSE 0 END,
+                department_level_points = department_level_points - 
+                    CASE WHEN OLD.event_type = 'department_level' THEN OLD.points ELSE 0 END,
+                fa_assigned_points = fa_assigned_points - 
+                    CASE WHEN OLD.event_type = 'fa_assigned' THEN OLD.points ELSE 0 END
+            WHERE roll_number = OLD.student_roll_number;
+        END IF;
     END IF;
     
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    ELSE
-        RETURN NEW;
-    END IF;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -220,29 +250,28 @@ CREATE TRIGGER trigger_update_student_point_totals
     FOR EACH ROW
     EXECUTE FUNCTION update_student_point_totals();
 
--- Function to handle resubmission logic
+-- 2. Function to handle resubmission
 CREATE OR REPLACE FUNCTION handle_resubmission()
 RETURNS TRIGGER AS $$
-DECLARE
-    last_submission_id INTEGER;
-    last_attempt_number INTEGER;
 BEGIN
-    -- Only for INSERT operations
-    IF TG_OP = 'INSERT' THEN
-        -- Check if there's a previous submission for the same event
-        SELECT point_id, attempt_number 
-        INTO last_submission_id, last_attempt_number
-        FROM student_points 
-        WHERE student_roll_number = NEW.student_roll_number 
-        AND event_name = NEW.event_name 
-        AND status = 'REJECTED'
-        ORDER BY submission_date DESC 
+    -- If this is a resubmission, link to previous submission
+    IF NEW.previous_submission_id IS NULL AND TG_OP = 'INSERT' THEN
+        -- Check for existing submissions for the same event
+        SELECT point_id INTO NEW.previous_submission_id
+        FROM student_points
+        WHERE student_roll_number = NEW.student_roll_number
+          AND event_name = NEW.event_name
+          AND status IN ('PENDING', 'REJECTED')
+        ORDER BY submission_date DESC
         LIMIT 1;
         
-        -- If there's a previous rejected submission, link it and increment attempt number
-        IF last_submission_id IS NOT NULL THEN
-            NEW.previous_submission_id := last_submission_id;
-            NEW.attempt_number := last_attempt_number + 1;
+        -- Set attempt number
+        IF NEW.previous_submission_id IS NOT NULL THEN
+            SELECT attempt_number + 1 INTO NEW.attempt_number
+            FROM student_points
+            WHERE point_id = NEW.previous_submission_id;
+        ELSE
+            NEW.attempt_number := 1;
         END IF;
     END IF;
     
@@ -250,52 +279,89 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger to handle resubmission tracking
+-- Trigger for resubmission
 CREATE TRIGGER trigger_handle_resubmission
     BEFORE INSERT ON student_points
     FOR EACH ROW
     EXECUTE FUNCTION handle_resubmission();
 
--- Enhanced views
+-- 3. NEW: Function to handle category changes
+CREATE OR REPLACE FUNCTION update_student_points_on_category_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only process if status is APPROVED and event_type changed
+    IF NEW.status = 'APPROVED' AND OLD.event_type IS DISTINCT FROM NEW.event_type THEN
+        -- Subtract points from old category
+        UPDATE students
+        SET
+            total_points = total_points - OLD.points,
+            institute_level_points = CASE 
+                WHEN OLD.event_type = 'institute_level' THEN institute_level_points - OLD.points 
+                ELSE institute_level_points 
+            END,
+            department_level_points = CASE 
+                WHEN OLD.event_type = 'department_level' THEN department_level_points - OLD.points 
+                ELSE department_level_points 
+            END,
+            fa_assigned_points = CASE 
+                WHEN OLD.event_type = 'fa_assigned' THEN fa_assigned_points - OLD.points 
+                ELSE fa_assigned_points 
+            END
+        WHERE roll_number = OLD.student_roll_number;
+        
+        -- Add points to new category
+        UPDATE students
+        SET
+            total_points = total_points + NEW.points,
+            institute_level_points = CASE 
+                WHEN NEW.event_type = 'institute_level' THEN institute_level_points + NEW.points 
+                ELSE institute_level_points 
+            END,
+            department_level_points = CASE 
+                WHEN NEW.event_type = 'department_level' THEN department_level_points + NEW.points 
+                ELSE department_level_points 
+            END,
+            fa_assigned_points = CASE 
+                WHEN NEW.event_type = 'fa_assigned' THEN fa_assigned_points + NEW.points 
+                ELSE fa_assigned_points 
+            END
+        WHERE roll_number = NEW.student_roll_number;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- NEW: Trigger for category changes
+CREATE TRIGGER trg_student_points_category_change
+AFTER UPDATE OF event_type, status ON student_points
+FOR EACH ROW
+WHEN (
+    OLD.status = 'APPROVED' OR 
+    NEW.status = 'APPROVED'
+)
+EXECUTE FUNCTION update_student_points_on_category_change();
+
+-- 4. Views
 CREATE VIEW student_eligibility_status AS
 SELECT 
     s.roll_number,
     s.student_name,
-    u.email,
     s.department,
-    s.program,
     s.batch_year,
     s.total_points,
     s.institute_level_points,
     s.department_level_points,
     s.fa_assigned_points,
     s.graduation_eligible,
-    -- Calculate remaining points needed
-    GREATEST(0, 80 - s.total_points) as total_points_needed,
-    GREATEST(0, 20 - s.institute_level_points) as institute_points_needed,
-    GREATEST(0, 20 - s.department_level_points) as department_points_needed,
-    -- Status messages
     CASE 
-        WHEN s.total_points >= 80 THEN 'Met'
-        ELSE 'Need ' || (80 - s.total_points) || ' more points'
-    END as total_points_status,
-    CASE 
-        WHEN s.institute_level_points >= 20 THEN 'Met'
-        ELSE 'Need ' || (20 - s.institute_level_points) || ' more points'
-    END as institute_points_status,
-    CASE 
-        WHEN s.department_level_points >= 20 THEN 'Met'
-        ELSE 'Need ' || (20 - s.department_level_points) || ' more points'
-    END as department_points_status
-FROM students s
-JOIN users u ON s.user_id = u.user_id;
+        WHEN s.graduation_eligible THEN 'ELIGIBLE'
+        ELSE 'NOT_ELIGIBLE'
+    END AS eligibility_status
+FROM students s;
 
--- View for resubmission tracking
 CREATE VIEW student_submission_history AS
 SELECT 
-    sp.point_id,
     sp.student_roll_number,
-    s.student_name,
     sp.event_name,
     sp.event_type,
     sp.points,
@@ -304,46 +370,22 @@ SELECT
     sp.submission_date,
     sp.attempt_number,
     sp.rejection_reason,
-    sp.previous_submission_id,
-    -- Check if this is a resubmission
-    CASE WHEN sp.previous_submission_id IS NOT NULL THEN TRUE ELSE FALSE END as is_resubmission,
-    -- Get previous attempt details
-    prev_sp.status as previous_status,
-    prev_sp.rejection_reason as previous_rejection_reason,
-    prev_sp.submission_date as previous_submission_date
+    s.student_name,
+    s.department
 FROM student_points sp
-JOIN students s ON sp.student_roll_number = s.roll_number
-LEFT JOIN student_points prev_sp ON sp.previous_submission_id = prev_sp.point_id
-ORDER BY sp.student_roll_number, sp.event_name, sp.attempt_number;
+JOIN students s ON sp.student_roll_number = s.roll_number;
 
--- View for faculty dashboard with resubmission info
 CREATE VIEW fa_dashboard_enhanced AS
 SELECT 
     fa.fa_id,
     fa.fa_name,
-    u.email as fa_email,
     fa.department,
-    COUNT(sfm.student_roll_number) as total_students_assigned,
-    COUNT(CASE WHEN s.graduation_eligible THEN 1 END) as eligible_students,
-    COUNT(CASE WHEN sp.status = 'PENDING' THEN 1 END) as pending_submissions,
-    COUNT(CASE WHEN sp.status = 'PENDING' AND sp.attempt_number > 1 THEN 1 END) as pending_resubmissions
+    COUNT(DISTINCT sfm.student_roll_number) AS total_students,
+    COUNT(DISTINCT CASE WHEN s.graduation_eligible THEN s.roll_number END) AS eligible_students,
+    COALESCE(SUM(sp.points), 0) AS total_points_managed,
+    AVG(s.total_points) AS avg_points_per_student
 FROM faculty_advisors fa
-JOIN users u ON fa.user_id = u.user_id
 LEFT JOIN student_faculty_mapping sfm ON fa.fa_id = sfm.fa_id AND sfm.is_active = TRUE
 LEFT JOIN students s ON sfm.student_roll_number = s.roll_number
-LEFT JOIN student_points sp ON s.roll_number = sp.student_roll_number
-GROUP BY fa.fa_id, fa.fa_name, u.email, fa.department;
-
--- Comments for documentation
-COMMENT ON TABLE users IS 'Main user table storing authentication and basic user information';
-COMMENT ON TABLE students IS 'Student-specific information with activity point tracking';
-COMMENT ON TABLE faculty_advisors IS 'Faculty advisor information';
-COMMENT ON TABLE student_faculty_mapping IS 'Many-to-many mapping between students and faculty advisors';
-COMMENT ON TABLE event_organizers IS 'Event organizer information';
-COMMENT ON TABLE admins IS 'System administrator information';
-COMMENT ON TABLE student_points IS 'Unified table for all student point allocations and submissions with resubmission support';
-COMMENT ON COLUMN student_points.attempt_number IS 'Tracks the number of submission attempts for the same event';
-COMMENT ON COLUMN student_points.previous_submission_id IS 'References the previous submission for resubmission tracking';
-COMMENT ON INDEX unique_approved_points_per_event_per_student IS 'Prevents multiple approved submissions for the same event';
-COMMENT ON INDEX unique_pending_points_per_event_per_student IS 'Prevents multiple pending submissions for the same event (anti-spam)';
-COMMENT ON VIEW student_submission_history IS 'Complete history of submissions including resubmission tracking';
+LEFT JOIN student_points sp ON s.roll_number = sp.student_roll_number AND sp.status = 'APPROVED'
+GROUP BY fa.fa_id, fa.fa_name, fa.department;
