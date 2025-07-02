@@ -7,11 +7,19 @@
   import authRoutes from './routes/authRoutes.js';
   import registerRoutes from './routes/registerRoutes.js';
   import userDetailsRoutes from './routes/userDetailsRoutes.js';
+  import eventOrganizerRoutes from './routes/eventOrganizerRoutes.js';
   import cookieParser from 'cookie-parser';
 import { register } from 'module';
 import { getUserDetails } from 'controllers/userDetails.js';
-  //import userRoutes from './routes/userRoutes';
-  // import other routes as needed
+import { existsSync, mkdirSync } from 'fs';
+import path from 'path';
+
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+
+// Create directory if it doesn't exist
+if (!existsSync(UPLOADS_DIR)) {
+  mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
   const app = express();
 
@@ -68,6 +76,13 @@ import { getUserDetails } from 'controllers/userDetails.js';
           //profile: 'GET /api/auth/profile',
           //validate: 'GET /api/auth/validate',
           getUserDetailsforalreadylogineduser: 'GET /api/getuserdetails/me',
+          evnetorganizerallocatepoints:'POST /api/event-organizer/allocate',
+          eventOrganizerreallocatepoints:'PUT /api/event-organizer/reallocate',
+          eventOrganizerreallocatedetails:'PUT /api/event-organizer/reallocate/details',
+          eventOrganizerrevokeallocation:'POST /api/event-organizer/revoke',
+          eventOrganizerRoutesviewallocatedallocation:'GET /api/event-organizer/allocations/allocated',
+          eventOrganizerRoutesviewrevokedallocation:'GET /api/event-organizer/allocations/revoked',
+          eventorganizergetuploadedfileforallocatedorrevokedallocations:'GET /api/event-organizer/allocations/file'
           //we will use local storage for storing jwt and for user who already has valid jwt
           //this needs to be checked by frontend and is there is no need for user to login again
           //the frontend can hit this route to get the dashboard data directly without the
@@ -88,6 +103,7 @@ import { getUserDetails } from 'controllers/userDetails.js';
   app.use('/api/auth', authRoutes);//later after all routes development change auth to use google o auth
   app.use('/api/register',registerRoutes);
   app.use('/api/getuserdetails',userDetailsRoutes);
+  app.use('/api/event-organizer', eventOrganizerRoutes);
   //app.use('/api/users', userRoutes);
   // app.use('/api/students', studentRoutes); // Add more as needed
 

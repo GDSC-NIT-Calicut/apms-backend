@@ -13,6 +13,11 @@ export const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
+// Add this function for transactions
+export const getClient = async () => {
+  const client = await pool.connect();
+  return client;
+};
 
 // Query function wrapper for connection handling
 export const query = async (text: string, params?: any[]) => {
