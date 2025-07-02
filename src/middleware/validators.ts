@@ -226,3 +226,52 @@ export const validateDownloadAllocationFileInput = (req: Request, res: Response,
 };
 
 
+export const validateSubmitStudentRequest = (req: Request, res: Response, next: NextFunction) => {
+  const { event_name, event_type, event_date, points } = req.body;
+  const file = req.file;
+
+  if (!event_name || typeof event_name !== 'string')
+    return res.status(400).json({ message: 'event_name is required and must be a string' });
+  if (!event_type || !['institute_level', 'department_level', 'fa_assigned'].includes(event_type))
+    return res.status(400).json({ message: 'event_type is required and must be a valid category' });
+  if (!event_date || isNaN(Date.parse(event_date)))
+    return res.status(400).json({ message: 'event_date is required and must be a valid date string' });
+  if (!points || isNaN(Number(points)) || Number(points) <= 0)
+    return res.status(400).json({ message: 'points must be a positive number' });
+  if (!file)
+    return res.status(400).json({ message: 'proof (PDF) is required' });
+  if (file.mimetype !== 'application/pdf')
+    return res.status(400).json({ message: 'proof must be a PDF file' });
+  next();
+};
+
+export const validateResubmitStudentRequest = (req: Request, res: Response, next: NextFunction) => {
+  const { point_id, event_name, event_type, event_date, points } = req.body;
+  const file = req.file;
+
+  if (!point_id || isNaN(Number(point_id)))
+    return res.status(400).json({ message: 'point_id is required and must be a number' });
+
+  if (!event_name && !event_type && !event_date && !points && !file)
+    return res.status(400).json({ message: 'At least one field to update must be provided' });
+
+  if (event_name && typeof event_name !== 'string')
+    return res.status(400).json({ message: 'event_name must be a string' });
+  if (event_type && !['institute_level', 'department_level', 'fa_assigned'].includes(event_type))
+    return res.status(400).json({ message: 'event_type must be a valid category' });
+  if (event_date && isNaN(Date.parse(event_date)))
+    return res.status(400).json({ message: 'event_date must be a valid date string' });
+  if (points && (isNaN(Number(points)) || Number(points) <= 0))
+    return res.status(400).json({ message: 'points must be a positive number' });
+  if (file && file.mimetype !== 'application/pdf')
+    return res.status(400).json({ message: 'proof must be a PDF file' });
+  next();
+};
+
+export const validateDownloadProofDocument = (req: Request, res: Response, next: NextFunction) => {
+  const { point_id } = req.query;
+  if (!point_id || isNaN(Number(point_id)))
+    return res.status(400).json({ message: 'point_id is required as a query parameter and must be a number' });
+  next();
+};
+
