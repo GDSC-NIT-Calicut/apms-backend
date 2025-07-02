@@ -10,7 +10,6 @@ export interface User {
   user_id: number;
   email: string;
   role: UserRole;
-  created_at?: Date; // Optional, set by DB
 }
 
 export interface Student {
@@ -104,3 +103,21 @@ export interface DatabaseConfig {
   user: string;
   password: string;
 }
+export type EventAllocationStatus = 'allocated' | 'revoked';
+
+export interface EventOrganizerAllocation {
+  allocation_id: number;
+  organizer_id: number;
+  allocation_date: Date;
+  file_path: string;
+  status: EventAllocationStatus;
+  event_name: string;
+  event_type: 'institute_level' | 'department_level' | 'fa_assigned';
+  event_date: Date;
+}
+
+export interface AllocationCSVRow {
+  roll_number: string;
+  points: number;
+}
+
