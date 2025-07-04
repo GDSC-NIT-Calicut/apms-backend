@@ -9,11 +9,10 @@
   import userDetailsRoutes from './routes/userDetailsRoutes.js';
   import eventOrganizerRoutes from './routes/eventOrganizerRoutes.js';
   import studentRoutes from './routes/studentRoutes.js';
+  import facultyRoutes from './routes/facultyRoutes.js';
   import cookieParser from 'cookie-parser';
-import { register } from 'module';
-import { getUserDetails } from 'controllers/userDetails.js';
-import { existsSync, mkdirSync } from 'fs';
-import path from 'path';
+  import { existsSync, mkdirSync } from 'fs';
+  import path from 'path';
 
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 
@@ -113,6 +112,7 @@ if (!existsSync(UPLOADS_DIR)) {
   app.use('/api/getuserdetails',userDetailsRoutes);
   app.use('/api/event-organizer', eventOrganizerRoutes);
   app.use('/api/student', studentRoutes);
+  app.use('/api/faculty',facultyRoutes);
   //app.use('/api/users', userRoutes);
   // app.use('/api/students', studentRoutes); // Add more as needed
 
