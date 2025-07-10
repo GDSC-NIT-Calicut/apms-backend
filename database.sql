@@ -116,6 +116,34 @@ CREATE TABLE student_points (
     resubmitted BOOLEAN DEFAULT FALSE
 );
 
+-- this for handling removal of faculty adviso
+-- Insert dummy user for "No FA Assigned" faculty advisor
+INSERT INTO users (email, password_hash, role)
+VALUES ('[email,protected]', 'dummyhash', 'faculty_advisor')
+ON CONFLICT (email) DO NOTHING;
+
+-- Insert dummy faculty advisor for each department (repeat for all departments)
+INSERT INTO faculty_advisors (fa_name, user_id, department)
+SELECT 'No FA Assigned', user_id, 'CS'
+FROM users WHERE email = '[email,protected]'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO faculty_advisors (fa_name, user_id, department)
+SELECT 'No FA Assigned', user_id, 'EC'
+FROM users WHERE email = '[email,protected]'
+ON CONFLICT DO NOTHING;
+INSERT INTO faculty_advisors (fa_name, user_id, department)
+SELECT 'No FA Assigned', user_id, 'EE'
+FROM users WHERE email = '[email,protected]'
+ON CONFLICT DO NOTHING;
+INSERT INTO faculty_advisors (fa_name, user_id, department)
+SELECT 'No FA Assigned', user_id, 'ME'
+FROM users WHERE email = '[email,protected]'
+ON CONFLICT DO NOTHING;
+
+-- Repeat for all departments in your DEPARTMENT_CODES
+
+
 -- Create indexes
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
