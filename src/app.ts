@@ -10,6 +10,7 @@
   import eventOrganizerRoutes from './routes/eventOrganizerRoutes.js';
   import studentRoutes from './routes/studentRoutes.js';
   import facultyRoutes from './routes/facultyRoutes.js';
+  import adminRoutes from './routes/adminRoutes.js';
   import cookieParser from 'cookie-parser';
   import { existsSync, mkdirSync } from 'fs';
   import path from 'path';
@@ -33,7 +34,7 @@ if (!existsSync(UPLOADS_DIR)) {
   // CORS configuration
   app.use(cors({
     origin: config.cors.allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   }));
@@ -89,7 +90,14 @@ if (!existsSync(UPLOADS_DIR)) {
           studentsgetpendingrequest:'GET /api/student/requests/pending',
           studentsubmitactivity:'POST /api/student/requests/submit',
           studentresubmitactivity:'POST /api/student/requests/resubmit',
-          studentviewuploadeddocument:'GET /api/student/requests/proof'
+          studentviewuploadeddocument:'GET /api/student/requests/proof',
+          facutlygetpendingrequests:'GET /api/faculty/requests/pending',
+          facultyapprovependingrequest:'POST /api/faculty/requests/approve',
+          facultyrejectpendingrequest:'POST /api/faculty/requests/reject',
+          facultytoviewuploadedproofdocument:'GET /api/faculty/requests/proof',
+          facultytoviewallstudentstatusassignedtothem:'GET /api/faculty/students/status',
+          facultytodirectlyassignpointstostudentunderfaassignedcategory:'POST /api/faculty/assign'
+          //add admin routes
           //we will use local storage for storing jwt and for user who already has valid jwt
           //this needs to be checked by frontend and is there is no need for user to login again
           //the frontend can hit this route to get the dashboard data directly without the
@@ -113,6 +121,7 @@ if (!existsSync(UPLOADS_DIR)) {
   app.use('/api/event-organizer', eventOrganizerRoutes);
   app.use('/api/student', studentRoutes);
   app.use('/api/faculty',facultyRoutes);
+  app.use('/api/admin',adminRoutes);
   //app.use('/api/users', userRoutes);
   // app.use('/api/students', studentRoutes); // Add more as needed
 

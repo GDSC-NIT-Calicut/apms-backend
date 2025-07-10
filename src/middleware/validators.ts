@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { LoginCredentials,isUserRole } from '../types/index.js';
+import { LoginCredentials,isUserRole, BulkRegisterStudentRow, BulkRegisterFacultyRow, BulkRegisterEventOrganizerRow, BulkRemoveRow,
+  EditStudentInput, EditFacultyInput, EditEventOrganizerInput, EditAdminInput } from '../types/index.js';
 
 export const validateLoginInput = (
   req: Request,
@@ -274,4 +275,63 @@ export const validateDownloadProofDocument = (req: Request, res: Response, next:
     return res.status(400).json({ message: 'point_id is required as a query parameter and must be a number' });
   next();
 };
+
+
+
+
+const PROGRAMS = ['btech', 'mtech', 'phd'];
+const DUMMY_FA_EMAIL = '[email,protected]';
+
+export function validateBulkStudentRow(row: BulkRegisterStudentRow): string | null {
+  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!row.password) return 'Missing password';
+  if (!row.student_name) return 'Missing student_name';
+  if (!row.roll_number) return 'Missing roll_number';
+  if (!row.department || !DEPARTMENT_CODES.includes(row.department)) return 'Invalid department';
+  if (!row.program || !PROGRAMS.includes(row.program)) return 'Invalid program';
+  if (!row.batch_year || typeof row.batch_year !== 'number') return 'Invalid batch_year';
+  if (!row.fa_name) return 'Missing fa_name';
+  return null;
+}
+
+export function validateBulkFacultyRow(row: BulkRegisterFacultyRow): string | null {
+  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!row.password) return 'Missing password';
+  if (!row.fa_name) return 'Missing fa_name';
+  if (!row.department || !DEPARTMENT_CODES.includes(row.department)) return 'Invalid department';
+  return null;
+}
+
+export function validateBulkEventOrganizerRow(row: BulkRegisterEventOrganizerRow): string | null {
+  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!row.password) return 'Missing password';
+  if (!row.organizer_name) return 'Missing organizer_name';
+  if (!row.organization_name) return 'Missing organization_name';
+  return null;
+}
+
+export function validateBulkRemoveRow(row: BulkRemoveRow): string | null {
+  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  return null;
+}
+
+export function validateEditStudentInput(input: EditStudentInput): string | null {
+  if (input.department && !DEPARTMENT_CODES.includes(input.department)) return 'Invalid department';
+  if (input.program && !PROGRAMS.includes(input.program)) return 'Invalid program';
+  if (input.batch_year && typeof input.batch_year !== 'number') return 'Invalid batch_year';
+  return null;
+}
+
+export function validateEditFacultyInput(input: EditFacultyInput): string | null {
+  if (input.department && !DEPARTMENT_CODES.includes(input.department)) return 'Invalid department';
+  return null;
+}
+
+export function validateEditEventOrganizerInput(input: EditEventOrganizerInput): string | null {
+  return null;
+}
+
+export function validateEditAdminInput(input: EditAdminInput): string | null {
+  return null;
+}
 
