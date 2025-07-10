@@ -137,3 +137,56 @@ export interface StudentResubmitRequestInput {
   points?: number;
   proof?: Express.Multer.File;
 }
+
+
+export interface BulkRegisterStudentRow {
+  email: string;
+  password: string;
+  student_name: string;
+  roll_number: string;
+  department: string;
+  program: 'btech' | 'mtech' | 'phd';
+  batch_year: number;
+  fa_name: string;
+}
+
+export interface BulkRegisterFacultyRow {
+  email: string;
+  password: string;
+  fa_name: string;
+  department: string;
+}
+
+export interface BulkRegisterEventOrganizerRow {
+  email: string;
+  password: string;
+  organizer_name: string;
+  organization_name: string;
+}
+
+export interface BulkRemoveRow {
+  email: string;
+}
+
+export interface EditStudentInput {
+  student_name?: string;
+  department?: string;
+  roll_number?: string;
+  program?: 'btech' | 'mtech' | 'phd';
+  batch_year?: number;
+  fa_name?: string;
+}
+
+export interface EditFacultyInput {
+  fa_name?: string;
+  department?: string;
+}
+
+export interface EditEventOrganizerInput {
+  organizer_name?: string;
+  organization_name?: string;
+}
+
+export interface EditAdminInput {
+  admin_name?: string;
+}
