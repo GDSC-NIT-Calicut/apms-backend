@@ -1,7 +1,7 @@
 // User creation
 export const createUserQuery = `
-  INSERT INTO users (email, password_hash, role)
-  VALUES ($1, $2, $3)
+  INSERT INTO users (email, role)
+  VALUES ($1, $2)
   RETURNING user_id, email, role
 `;
 
