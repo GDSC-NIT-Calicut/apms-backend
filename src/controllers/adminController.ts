@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs/promises';
 import path from 'path';
-import bcrypt from 'bcrypt';
 import { getClient } from '../database/index.js';
 import {
   checkUserByEmailAndRoleQuery,
@@ -25,10 +24,9 @@ import {
   validateBulkStudentRow, validateBulkFacultyRow, validateBulkEventOrganizerRow, validateBulkRemoveRow,
   validateEditStudentInput, validateEditFacultyInput, validateEditEventOrganizerInput, validateEditAdminInput
 } from '../middleware/validators.js';
-import { config } from '../config/environment.js';
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
-const DUMMY_FA_EMAIL = '[email protected]';
+const DUMMY_FA_EMAIL = '[email protected]';
 
 // --- Bulk Register Students ---
 export const bulkRegisterStudents = async (req: Request, res: Response) => {
@@ -37,15 +35,15 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
-   const records = parse(fileBuffer, {
-  columns: ['email', 'password', 'student_name', 'roll_number', 'department', 'program', 'batch_year', 'fa_name'],
-  skip_empty_lines: true,
-  from_line: 2,
-  cast: (value, context) => {
-    if (context.column === 'batch_year') return Number(value);
-    return value;
-  }
-});
+    const records = parse(fileBuffer, {
+      columns: ['email', 'student_name', 'roll_number', 'department', 'program', 'batch_year', 'fa_name'],
+      skip_empty_lines: true,
+      from_line: 2,
+      cast: (value, context) => {
+        if (context.column === 'batch_year') return Number(value);
+        return value;
+      }
+    });
 
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
@@ -54,8 +52,8 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
       if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'student']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      const passwordHash = await bcrypt.hash(row.password, config.bcrypt.saltRounds);
-      const userResult = await client.query(createUserQuery, [row.email, passwordHash, 'student']);
+      // Create user WITHOUT password
+      const userResult = await client.query(createUserQuery, [row.email, 'student']);
       const userId = userResult.rows[0].user_id;
       await client.query(createStudentQuery, [row.roll_number, row.student_name, userId, row.department, row.program, row.batch_year]);
       const faResult = await client.query(findFacultyAdvisorQuery, [row.fa_name, row.department]);
@@ -82,7 +80,7 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
     const records = parse(fileBuffer, {
-      columns: ['email', 'password', 'fa_name', 'department'],
+      columns: ['email', 'fa_name', 'department'],
       skip_empty_lines: true,
       from_line: 2
     });
@@ -93,8 +91,8 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
       if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'faculty_advisor']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      const passwordHash = await bcrypt.hash(row.password, config.bcrypt.saltRounds);
-      const userResult = await client.query(createUserQuery, [row.email, passwordHash, 'faculty_advisor']);
+      // Create user WITHOUT password
+      const userResult = await client.query(createUserQuery, [row.email, 'faculty_advisor']);
       const userId = userResult.rows[0].user_id;
       await client.query(createFacultyAdvisorQuery, [row.fa_name, userId, row.department]);
     }
@@ -117,7 +115,7 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
     const records = parse(fileBuffer, {
-      columns: ['email', 'password', 'organizer_name', 'organization_name'],
+      columns: ['email', 'organizer_name', 'organization_name'],
       skip_empty_lines: true,
       from_line: 2
     });
@@ -128,8 +126,8 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
       if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'event_organizer']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      const passwordHash = await bcrypt.hash(row.password, config.bcrypt.saltRounds);
-      const userResult = await client.query(createUserQuery, [row.email, passwordHash, 'event_organizer']);
+      // Create user WITHOUT password
+      const userResult = await client.query(createUserQuery, [row.email, 'event_organizer']);
       const userId = userResult.rows[0].user_id;
       await client.query(createEventOrganizerQuery, [row.organizer_name, userId, row.organization_name]);
     }
@@ -143,6 +141,9 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
     await fs.unlink(filePath);
   }
 };
+
+
+
 
 // --- Bulk Remove Users ---
 export const bulkRemoveUsers = async (req: Request, res: Response) => {
