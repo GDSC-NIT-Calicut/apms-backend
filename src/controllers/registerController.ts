@@ -10,16 +10,13 @@ import {
   createEventOrganizerQuery,
   createFacultyAdvisorQuery
 } from '../database/queries/index.js';
-import bcrypt from 'bcrypt';
-import { config } from '../config/environment.js';
-
 
 // --- Student Registration ---
 export const registerStudentController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     const {
-      email, password, role,
+      email, role,
       roll_number, student_name, department, program, batch_year, fa_name
     } = req.body;
 
@@ -31,9 +28,8 @@ export const registerStudentController = async (req: Request, res: Response) => 
 
     await client.query('BEGIN');
 
-    // Hash password and create user
-    const passwordHash = await bcrypt.hash(password, config.bcrypt.saltRounds);
-    const userResult = await client.query(createUserQuery, [email, passwordHash, role]);
+    // Create user WITHOUT password
+    const userResult = await client.query(createUserQuery, [email, role]);
     const userId = userResult.rows[0].user_id;
 
     // Create student
@@ -66,7 +62,7 @@ export const registerStudentController = async (req: Request, res: Response) => 
 export const registerAdminController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, password, role, admin_name } = req.body;
+    const { email, role, admin_name } = req.body;
 
     // Check if user exists with same email and role
     const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
@@ -76,9 +72,8 @@ export const registerAdminController = async (req: Request, res: Response) => {
 
     await client.query('BEGIN');
 
-    // Hash password and create user
-    const passwordHash = await bcrypt.hash(password, config.bcrypt.saltRounds);
-    const userResult = await client.query(createUserQuery, [email, passwordHash, role]);
+    // Create user WITHOUT password
+    const userResult = await client.query(createUserQuery, [email, role]);
     const userId = userResult.rows[0].user_id;
 
     // Create admin
@@ -98,7 +93,7 @@ export const registerAdminController = async (req: Request, res: Response) => {
 export const registerEventOrganizerController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, password, role, organizer_name, organization_name } = req.body;
+    const { email, role, organizer_name, organization_name } = req.body;
 
     // Check if user exists with same email and role
     const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
@@ -108,9 +103,8 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
 
     await client.query('BEGIN');
 
-    // Hash password and create user
-    const passwordHash = await bcrypt.hash(password, config.bcrypt.saltRounds);
-    const userResult = await client.query(createUserQuery, [email, passwordHash, role]);
+    // Create user WITHOUT password
+    const userResult = await client.query(createUserQuery, [email, role]);
     const userId = userResult.rows[0].user_id;
 
     // Create event organizer
@@ -130,7 +124,7 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
 export const registerFacultyAdvisorController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, password, role, fa_name, department } = req.body;
+    const { email, role, fa_name, department } = req.body;
 
     // Check if user exists with same email and role
     const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
@@ -140,9 +134,8 @@ export const registerFacultyAdvisorController = async (req: Request, res: Respon
 
     await client.query('BEGIN');
 
-    // Hash password and create user
-    const passwordHash = await bcrypt.hash(password, config.bcrypt.saltRounds);
-    const userResult = await client.query(createUserQuery, [email, passwordHash, role]);
+    // Create user WITHOUT password
+    const userResult = await client.query(createUserQuery, [email, role]);
     const userId = userResult.rows[0].user_id;
 
     // Create faculty advisor
