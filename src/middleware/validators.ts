@@ -2,26 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { LoginCredentials,isUserRole, BulkRegisterStudentRow, BulkRegisterFacultyRow, BulkRegisterEventOrganizerRow, BulkRemoveRow,
   EditStudentInput, EditFacultyInput, EditEventOrganizerInput, EditAdminInput } from '../types/index.js';
 
-export const validateLoginInput = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const { email, password,role } = req.body as LoginCredentials;
-  
+export const validateLoginInput = (req: Request, res: Response, next: NextFunction) => {
+  const { email, password } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ message: 'Email,role and password are required' });
+    return res.status(400).json({ message: 'Email and password are required' });
   }
-
-  if (typeof email !== 'string' || typeof password !== 'string' ||typeof role !== 'string' ||
-    !isUserRole(role)) {
-    return res.status(400).json({ message: 'Invalid input types' });
-  }
-
-  if (!email.endsWith('@nitc.ac.in')) {
-    return res.status(400).json({ message: 'Only NITC emails allowed' });
-  }
-
   next();
 };
 
@@ -38,9 +23,24 @@ const PROGRAM_PREFIX: Record<string, string> = {
   phd: 'P'
 };
 
+// Add PROGRAMS constant (single declaration)
+const PROGRAMS = ['btech', 'mtech', 'phd'];
+
+// helper: normalize string field from CSV / input (trim or return empty string)
+const norm = (v: any) => (typeof v === 'string' ? v.trim() : v ?? '');
+
+// helper: parse number from CSV - returns number or NaN
+const pnum = (v: any) => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v.trim());
+    return Number.isNaN(n) ? NaN : n;
+  }
+  return NaN;
+};
 
 export const validateRegisterInput = (req: Request, res: Response, next: NextFunction) => {
-  const { email, password, role } = req.body;
+  const { email, role } = req.body;
 
   // Check email presence and type
   if (!email || typeof email !== 'string') {
@@ -48,18 +48,11 @@ export const validateRegisterInput = (req: Request, res: Response, next: NextFun
   }
 
   // Check email domain
-  // const nitcEmailRegex = /^[a-zA-Z0-9._%+-]+@nitc\.ac\.in$/;
-  // if (!nitcEmailRegex.test(email)) {
-  //   return res.status(400).json({ message: 'Email must be a valid @nitc.ac.in address' });
-  // }
   if (!email.endsWith('@nitc.ac.in')) {
     return res.status(400).json({ message: 'Only NITC emails allowed' });
   }
 
-  // Check password presence and type
-  if (!password || typeof password !== 'string') {
-    return res.status(400).json({ message: 'Password is required and must be a string' });
-  }
+  // REMOVED password validation entirely
 
   // Check role validity
   if (!role || !isUserRole(role)) {
@@ -70,37 +63,42 @@ export const validateRegisterInput = (req: Request, res: Response, next: NextFun
 };
 
 
+
 // --- Student registration validator ---
 export const validateStudentFields = (req: Request, res: Response, next: NextFunction) => {
   const { roll_number, student_name, department, program, batch_year, fa_name } = req.body;
 
+  // Normalize inputs to avoid capitalization/order issues
+  const dept = typeof department === 'string' ? department.trim().toUpperCase() : department;
+  const prog = typeof program === 'string' ? program.trim().toLowerCase() : program;
+
   // Check required fields
-  if (!roll_number || !student_name || !department || !program || !batch_year || !fa_name) {
+  if (!roll_number || !student_name || !dept || !prog || !batch_year || !fa_name) {
     return res.status(400).json({ message: 'Missing required student fields' });
   }
 
   // Validate types
   if (typeof roll_number !== 'string' || typeof student_name !== 'string' ||
-      typeof department !== 'string' || typeof program !== 'string' ||
+      typeof dept !== 'string' || typeof prog !== 'string' ||
       typeof batch_year !== 'number' || typeof fa_name !== 'string') {
     return res.status(400).json({ message: 'Invalid type for one or more student fields' });
   }
 
   // Validate program
-  if (!['btech', 'mtech', 'phd'].includes(program)) {
+  if (!PROGRAMS.includes(prog)) {
     return res.status(400).json({ message: 'Invalid program' });
   }
 
   // Validate department code
-  if (!DEPARTMENT_CODES.includes(department)) {
+  if (!DEPARTMENT_CODES.includes(dept)) {
     return res.status(400).json({ message: 'Invalid department code' });
   }
 
   // Validate roll number format
-  const expectedPrefix = PROGRAM_PREFIX[program];
-  const rollRegex = new RegExp(`^${expectedPrefix}\\d{6}${department}$`, 'i');
+  const expectedPrefix = PROGRAM_PREFIX[prog];
+  const rollRegex = new RegExp(`^${expectedPrefix}\\d{6}${dept}$`, 'i');
   if (!rollRegex.test(roll_number)) {
-    return res.status(400).json({ message: `Invalid roll number format for program ${program} and department ${department}` });
+    return res.status(400).json({ message: `Invalid roll number format for program ${prog} and department ${dept}` });
   }
 
   // Validate batch year
@@ -279,39 +277,51 @@ export const validateDownloadProofDocument = (req: Request, res: Response, next:
 
 
 
-const PROGRAMS = ['btech', 'mtech', 'phd'];
-const DUMMY_FA_EMAIL = '[email,protected]';
 
 export function validateBulkStudentRow(row: BulkRegisterStudentRow): string | null {
-  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
-  if (!row.password) return 'Missing password';
-  if (!row.student_name) return 'Missing student_name';
-  if (!row.roll_number) return 'Missing roll_number';
-  if (!row.department || !DEPARTMENT_CODES.includes(row.department)) return 'Invalid department';
-  if (!row.program || !PROGRAMS.includes(row.program)) return 'Invalid program';
-  if (!row.batch_year || typeof row.batch_year !== 'number') return 'Invalid batch_year';
-  if (!row.fa_name) return 'Missing fa_name';
+  const email = norm(row.email);
+  const student_name = norm(row.student_name);
+  const roll_number = norm(row.roll_number);
+  const department = norm(row.department).toUpperCase();
+  const program = norm(row.program).toLowerCase();
+  const batch_year = pnum(row.batch_year);
+  const fa_name = norm(row.fa_name);
+
+  if (!email || !email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!student_name) return 'Missing student_name';
+  if (!roll_number) return 'Missing roll_number';
+  if (!department || !DEPARTMENT_CODES.includes(department)) return 'Invalid department';
+  if (!program || !PROGRAMS.includes(program)) return 'Invalid program';
+  if (Number.isNaN(batch_year) || batch_year < 2000 || batch_year > new Date().getFullYear() + 1) return 'Invalid batch_year';
+  if (!fa_name) return 'Missing fa_name';
   return null;
 }
 
 export function validateBulkFacultyRow(row: BulkRegisterFacultyRow): string | null {
-  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
-  if (!row.password) return 'Missing password';
-  if (!row.fa_name) return 'Missing fa_name';
-  if (!row.department || !DEPARTMENT_CODES.includes(row.department)) return 'Invalid department';
+  const email = norm(row.email);
+  const fa_name = norm(row.fa_name);
+  const department = norm(row.department).toUpperCase();
+
+  if (!email || !email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!fa_name) return 'Missing fa_name';
+  if (!department || !DEPARTMENT_CODES.includes(department)) return 'Invalid department';
   return null;
 }
 
 export function validateBulkEventOrganizerRow(row: BulkRegisterEventOrganizerRow): string | null {
-  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
-  if (!row.password) return 'Missing password';
-  if (!row.organizer_name) return 'Missing organizer_name';
-  if (!row.organization_name) return 'Missing organization_name';
+  const email = norm(row.email);
+  const organizer_name = norm(row.organizer_name);
+  const organization_name = norm(row.organization_name);
+
+  if (!email || !email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  if (!organizer_name) return 'Missing organizer_name';
+  if (!organization_name) return 'Missing organization_name';
   return null;
 }
 
 export function validateBulkRemoveRow(row: BulkRemoveRow): string | null {
-  if (!row.email || !row.email.endsWith('@nitc.ac.in')) return 'Invalid email';
+  const email = norm(row.email);
+  if (!email || !email.endsWith('@nitc.ac.in')) return 'Invalid email';
   return null;
 }
 
