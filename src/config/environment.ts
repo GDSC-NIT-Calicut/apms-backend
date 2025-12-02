@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { DatabaseError } from 'pg';
+
 
 dotenv.config();
 
@@ -15,7 +15,7 @@ export const config = {
   },
   jwt: {
     secret: process.env.JWT_SECRET!,
-    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+    expiresIn: String(process.env.JWT_EXPIRES_IN || '1h'),
     refreshSecret: process.env.JWT_REFRESH_SECRET!,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
@@ -30,4 +30,11 @@ export const config = {
     password: process.env.HARD_CODED_ADMIN_PASSWORD!,
     name: process.env.HARD_CODED_ADMIN_NAME!,
   },
+  googleOAuth: {
+  clientID: process.env.GOOGLE_OAUTH_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET!,
+  callbackURL: process.env.GOOGLE_OAUTH_CALLBACK_URL!,
+},
+frontendURL: 'https://yourfrontend.com/',
+
 };
