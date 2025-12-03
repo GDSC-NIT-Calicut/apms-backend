@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs/promises';
-import { createReadStream } from 'fs'; 
 import path from 'path';
 import { getClient, query } from '../database/index.js';
 import {
@@ -13,14 +12,13 @@ import {
   getAllocationByIdQuery,
   deleteStudentPointsByEventAndRollNumbersQuery,
   revokeAllocationQuery,
-  updateAllocationDetailsQuery,//this query handles file updation
-  updateStudentPointsQuery,//this updated the details in the student points table 
-  updateevnetdetails //this only handles event details updation in the event_organizer_allocation table
+  updateAllocationDetailsQuery,
+  updateStudentPointsQuery,
+  updateevnetdetails
 } from '../database/queries/eventOrganizerQueries.js';
 import { AllocationCSVRow, EventOrganizerAllocation } from '../types/index.js';
 import { assertHasUser } from '../utils/assertions.js';
-
-const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+import { isPathUnderBase, safeUnlink } from '../utils/fileUtils.js';
 
 // Helper to parse CSV file
 const parseCSV = (fileBuffer: Buffer): AllocationCSVRow[] => {
@@ -46,13 +44,13 @@ const parseCSV = (fileBuffer: Buffer): AllocationCSVRow[] => {
 export const allocatePoints = async (req: Request, res: Response) => {
   assertHasUser(req);
   const client = await getClient();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const { event_name, event_type, event_date } = req.body;
     const file = req.file;
-    
+
     if (!file) throw new Error('No file uploaded');
     if (!event_name || !event_type || !event_date) {
       throw new Error('Missing event details');
@@ -60,14 +58,14 @@ export const allocatePoints = async (req: Request, res: Response) => {
 
     const user_id = req.user.user_id;
     const organizerResult = await client.query(
-      getOrganizerIdByUserIdQuery, 
+      getOrganizerIdByUserIdQuery,
       [user_id]
     );
-    
+
     if (organizerResult.rows.length === 0) {
       throw new Error('Organizer not found');
     }
-    
+
     const organizer_id = organizerResult.rows[0].organizer_id;
 
     // Read the file from disk and parse CSV
@@ -88,8 +86,11 @@ export const allocatePoints = async (req: Request, res: Response) => {
       );
     }
 
-    // Get absolute path for consistent storage
+    // Get absolute path for consistent storage and ensure it's inside uploads dir
     const absoluteFilePath = path.resolve(file.path);
+    if (!isPathUnderBase(absoluteFilePath)) {
+      throw new Error('Invalid file path (outside uploads dir)');
+    }
 
     // Insert allocation record with ABSOLUTE path
     const allocationResult = await client.query(
@@ -174,122 +175,92 @@ export const getRevokedAllocations = async (req: Request, res: Response) => {
   }
 };
 
+// --- Download Allocation File (use DB to fetch file_path and validate ACL) ---
 export const downloadAllocationFile = async (req: Request, res: Response) => {
   assertHasUser(req);
-  const { allocation_id } = req.query;
-  
-  if (!allocation_id) {
-    return res.status(400).json({ message: 'Missing allocation_id in query parameters' });
-  }
-
   try {
+    const { allocationId } = req.params;
+    if (!allocationId) {
+      return res.status(400).json({ message: 'Missing allocationId parameter' });
+    }
+
+    // Ensure the caller is the organizer (or adjust logic for admins)
     const user_id = req.user.user_id;
-    const organizerResult = await query(
-      getOrganizerIdByUserIdQuery, 
-      [user_id]
-    );
-    
+    const organizerResult = await query(getOrganizerIdByUserIdQuery, [user_id]);
     if (organizerResult.rows.length === 0) {
       return res.status(404).json({ message: 'Organizer not found' });
     }
-    
     const organizer_id = organizerResult.rows[0].organizer_id;
 
-    // Get allocation and verify ownership
-    const allocationResult = await query(
-      getAllocationByIdQuery, 
-      [allocation_id, organizer_id]
-    );
-    
+    const allocationResult = await query(getAllocationByIdQuery, [allocationId, organizer_id]);
     if (allocationResult.rows.length === 0) {
       return res.status(404).json({ message: 'Allocation not found' });
     }
-    
-    const allocation: EventOrganizerAllocation = allocationResult.rows[0];
-    
-    // Resolve relative paths to absolute
+
+    const allocation = allocationResult.rows[0] as EventOrganizerAllocation;
     const absoluteFilePath = path.resolve(allocation.file_path);
-    const absoluteUploadsDir = path.resolve(UPLOADS_DIR);
 
-    // Normalize paths
-    const normalizedFilePath = path.normalize(absoluteFilePath);
-    const normalizedUploadsDir = path.normalize(absoluteUploadsDir);
-
-    // Case-insensitive path comparison for Windows
-    const isPathValid = process.platform === 'win32'
-        ? normalizedFilePath.toLowerCase().startsWith(normalizedUploadsDir.toLowerCase())
-        : normalizedFilePath.startsWith(normalizedUploadsDir);
-
-    if (!isPathValid) {
-      console.error(`Path validation failed: ${normalizedFilePath} not in ${normalizedUploadsDir}`);
+    if (!isPathUnderBase(absoluteFilePath)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Check if file exists
-    try {
-      await fs.access(normalizedFilePath);
-    } catch {
-      return res.status(404).json({ message: 'File not found' });
-    }
-
-    // Stream file with proper headers
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(normalizedFilePath)}"`);
-    res.setHeader('Content-Type', 'text/csv');
-    
-    const fileStream = createReadStream(normalizedFilePath);
-    fileStream.pipe(res);
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.sendFile(absoluteFilePath);
+  } catch (err: any) {
+    console.error('Download error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-
-
-
+// --- Revoke Allocation (validate file path before reading) ---
 export const revokeAllocation = async (req: Request, res: Response) => {
   assertHasUser(req);
   const client = await getClient();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const { allocation_id } = req.body;
-    
+
     if (!allocation_id) {
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
 
     const user_id = req.user.user_id;
     const organizerResult = await client.query(
-      getOrganizerIdByUserIdQuery, 
+      getOrganizerIdByUserIdQuery,
       [user_id]
     );
-    
+
     if (organizerResult.rows.length === 0) {
       return res.status(404).json({ message: 'Organizer not found' });
     }
-    
+
     const organizer_id = organizerResult.rows[0].organizer_id;
 
     // Get allocation
     const allocationResult = await client.query(
-      getAllocationByIdQuery, 
+      getAllocationByIdQuery,
       [allocation_id, organizer_id]
     );
-    
+
     if (allocationResult.rows.length === 0) {
       return res.status(404).json({ message: 'Allocation not found' });
     }
-    
+
     const allocation: EventOrganizerAllocation = allocationResult.rows[0];
-    
+
     if (allocation.status === 'revoked') {
       return res.status(400).json({ message: 'Allocation already revoked' });
     }
 
+    // Validate file path before reading
+    const absoluteFilePath = path.resolve(allocation.file_path);
+    if (!isPathUnderBase(absoluteFilePath)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     // Parse CSV to get roll numbers
-    const fileBuffer = await fs.readFile(allocation.file_path);
+    const fileBuffer = await fs.readFile(absoluteFilePath);
     const records: AllocationCSVRow[] = parseCSV(fileBuffer);
     const rollNumbers = records.map(r => r.roll_number);
 
@@ -302,16 +273,16 @@ export const revokeAllocation = async (req: Request, res: Response) => {
         rollNumbers
       ]
     );
-    
+
     // Update allocation status
     await client.query(
       revokeAllocationQuery,
       [allocation_id]
     );
-    
+
     await client.query('COMMIT');
 
-    res.json({ 
+    res.json({
       message: 'Allocation revoked',
       students_affected: rollNumbers.length
     });
@@ -323,60 +294,66 @@ export const revokeAllocation = async (req: Request, res: Response) => {
     client.release();
   }
 };
+
+// --- Reallocate Points (safe unlink old file if replacing with new file) ---
 export const reallocatePoints = async (req: Request, res: Response) => {
   assertHasUser(req);
   const client = await getClient();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const { allocation_id, event_name, event_type, event_date } = req.body;
     const file = req.file;
-    
+
     if (!allocation_id) {
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
-    
+
     if (!file && !event_name && !event_type && !event_date) {
       return res.status(400).json({ message: 'No changes provided' });
     }
 
     const user_id = req.user.user_id;
     const organizerResult = await client.query(
-      getOrganizerIdByUserIdQuery, 
+      getOrganizerIdByUserIdQuery,
       [user_id]
     );
-    
+
     if (organizerResult.rows.length === 0) {
       return res.status(404).json({ message: 'Organizer not found' });
     }
-    
+
     const organizer_id = organizerResult.rows[0].organizer_id;
 
     // Get existing allocation
     const allocationResult = await client.query(
-      getAllocationByIdQuery, 
+      getAllocationByIdQuery,
       [allocation_id, organizer_id]
     );
-    
+
     if (allocationResult.rows.length === 0) {
       return res.status(404).json({ message: 'Allocation not found' });
     }
-    
+
     const allocation: EventOrganizerAllocation = allocationResult.rows[0];
 
     // Handle new file if uploaded
     let newFilePath = allocation.file_path;
     let records: AllocationCSVRow[] = [];
-    
+
     if (file) {
       // Parse new CSV
       const newFileBuffer = await fs.readFile(file.path);
       records = parseCSV(newFileBuffer);
       newFilePath = file.path;
     } else {
-      // Use existing file
-      const oldFileBuffer = await fs.readFile(allocation.file_path);
+      // Use existing file (ensure safe path)
+      const absPath = path.resolve(allocation.file_path);
+      if (!isPathUnderBase(absPath)) {
+        throw new Error('Invalid file path (outside uploads dir)');
+      }
+      const oldFileBuffer = await fs.readFile(absPath);
       records = parseCSV(oldFileBuffer);
     }
 
@@ -387,7 +364,11 @@ export const reallocatePoints = async (req: Request, res: Response) => {
 
     // Revoke old points only if allocation was previously allocated
     if (allocation.status === 'allocated') {
-      const oldFileBuffer = await fs.readFile(allocation.file_path);
+      const absOldPath = path.resolve(allocation.file_path);
+      if (!isPathUnderBase(absOldPath)) {
+        throw new Error('Invalid file path (outside uploads dir)');
+      }
+      const oldFileBuffer = await fs.readFile(absOldPath);
       const oldRecords: AllocationCSVRow[] = parseCSV(oldFileBuffer);
       const oldRollNumbers = oldRecords.map(r => r.roll_number);
 
@@ -400,7 +381,7 @@ export const reallocatePoints = async (req: Request, res: Response) => {
         ]
       );
     }
-    
+
     // Insert new student points
     for (const record of records) {
       await client.query(
@@ -426,10 +407,13 @@ export const reallocatePoints = async (req: Request, res: Response) => {
         allocation_id
       ]
     );
-    
-    // Delete old file if new file was uploaded
+
+    // Delete old file if new file was uploaded (use safeUnlink)
     if (file) {
-      await fs.unlink(allocation.file_path);
+      const absOldPath = path.resolve(allocation.file_path);
+      if (isPathUnderBase(absOldPath)) {
+        await safeUnlink(absOldPath);
+      }
     }
 
     await client.query('COMMIT');
@@ -447,51 +431,52 @@ export const reallocatePoints = async (req: Request, res: Response) => {
   }
 };
 
+// --- Update Allocation Details (validate file path before reading) ---
 export const updateAllocationDetails = async (req: Request, res: Response) => {
   assertHasUser(req);
   const client = await getClient();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const { allocation_id, event_name, event_type, event_date } = req.body;
-    
+
     if (!allocation_id) {
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
-    
+
     if (!event_name && !event_type && !event_date) {
       return res.status(400).json({ message: 'No changes provided' });
     }
 
     const user_id = req.user.user_id;
     const organizerResult = await client.query(
-      getOrganizerIdByUserIdQuery, 
+      getOrganizerIdByUserIdQuery,
       [user_id]
     );
-    
+
     if (organizerResult.rows.length === 0) {
       return res.status(404).json({ message: 'Organizer not found' });
     }
-    
+
     const organizer_id = organizerResult.rows[0].organizer_id;
 
     // Get current allocation
     const allocationResult = await client.query(
-      getAllocationByIdQuery, 
+      getAllocationByIdQuery,
       [allocation_id, organizer_id]
     );
-    
+
     if (allocationResult.rows.length === 0) {
       return res.status(404).json({ message: 'Allocation not found' });
     }
-    
+
     const allocation = allocationResult.rows[0];
-    
+
     // Check if allocation is revoked
     if (allocation.status === 'revoked') {
-      return res.status(400).json({ 
-        message: 'Cannot update details of revoked allocations. Use reallocate instead.' 
+      return res.status(400).json({
+        message: 'Cannot update details of revoked allocations. Use reallocate instead.'
       });
     }
 
@@ -502,19 +487,25 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     const updatedAllocation = await client.query(
       updateevnetdetails,
       [
-        event_name||allocation.event_name,
-        event_type||allocation.event_type,
-        formattedEventDate||allocation.event_date,  // Use formatted date
+        event_name || allocation.event_name,
+        event_type || allocation.event_type,
+        formattedEventDate || allocation.event_date,  // Use formatted date
         allocation_id
       ]
     );
-    
+
     if (updatedAllocation.rows.length === 0) {
       return res.status(404).json({ message: 'Allocation not found' });
     }
 
+    // Ensure file path is valid before reading
+    const absPath = path.resolve(allocation.file_path);
+    if (!isPathUnderBase(absPath)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     // Read the CSV file to get roll numbers
-    const fileBuffer = await fs.readFile(allocation.file_path);
+    const fileBuffer = await fs.readFile(absPath);
     const records: AllocationCSVRow[] = parseCSV(fileBuffer);
     const rollNumbers = records.map(r => r.roll_number);
 
@@ -534,7 +525,7 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
-    
+
     res.json({
       allocation: updatedAllocation.rows[0]
     });

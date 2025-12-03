@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "baseUrl": "./src",
+    //"baseUrl": "./src",
     "outDir": "./dist",
     "rootDir": "./src",
     "sourceMap": true,

@@ -1,5 +1,7 @@
 import express from 'express';
 import multer from 'multer';
+import path from 'path';
+import { UPLOADS_DIR } from '../utils/fileUtils.js';
 import {
   viewPendingRequests,
   approveRequest,
@@ -16,12 +18,13 @@ import {
 const router = express.Router();
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+  destination: function (_req, _file, cb) {
+    cb(null, UPLOADS_DIR);
   },
-  filename: function (req, file, cb) {
+  filename: function (_req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + '.pdf');
+    cb(null, `faculty-${uniqueSuffix}${ext}`);
   },
 });
 const upload = multer({ storage });

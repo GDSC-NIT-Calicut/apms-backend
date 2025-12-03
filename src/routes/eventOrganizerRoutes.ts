@@ -1,5 +1,7 @@
 import express from 'express';
 import multer from 'multer';
+import path from 'path';
+import { UPLOADS_DIR } from '../utils/fileUtils.js';
 import { 
   allocatePoints,
   getAllocatedAllocations,
@@ -19,18 +21,20 @@ import {
 } from '../middleware/validators.js';
 
 const router = express.Router();
+
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+  destination: function (_req, _file, cb) {
+    cb(null, UPLOADS_DIR);
   },
-  filename: function (req, file, cb) {
+  filename: function (_req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + '.csv');
+    cb(null, `eo-${uniqueSuffix}${ext}`);
   }
 });
 
 const upload = multer({ storage });
-//cookie is must for all these routes
+// cookie is must for all these routes
 
 // --- POST /allocate ---
 router.post(
@@ -43,7 +47,7 @@ router.post(
 );
 
 // --- PUT /reallocate (file and/or details) ---
-//form data form (file is there along wiht allocation_id) and cookie
+// form data form (file is there along with allocation_id) and cookie
 router.put(
   '/reallocate',
   authenticate,
@@ -54,7 +58,7 @@ router.put(
 );
 
 // --- PUT /reallocate/details (details only) ---
-//raw json or form also acceptable
+// raw json or form also acceptable
 router.put(
   '/reallocate/details',
   authenticate,
@@ -64,7 +68,7 @@ router.put(
 );
 
 // --- POST /revoke ---
-//raw json format (but maybe can be sent in form also but not possible as request query)
+// raw json format (but maybe can be sent in form also but not possible as request query)
 router.post(
   '/revoke',
   authenticate,
@@ -74,7 +78,7 @@ router.post(
 );
 
 // --- GET /allocations/allocated ---
-//just cookie inclusion in enough
+// just cookie inclusion is enough
 router.get(
   '/allocations/allocated',
   authenticate,
@@ -83,7 +87,7 @@ router.get(
 );
 
 // --- GET /allocations/revoked ---
-//cookie is required
+// cookie is required
 router.get(
   '/allocations/revoked',
   authenticate,
@@ -92,7 +96,7 @@ router.get(
 );
 
 // --- GET /allocations/file?allocation_id=... ---
-//allocation id in the form of req query
+// allocation id in the form of req query
 router.get(
   '/allocations/file',
   authenticate,
