@@ -1,4 +1,4 @@
-  import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
   import cors from 'cors';
   import helmet from 'helmet';
   import morgan from 'morgan';
@@ -14,13 +14,11 @@
   import { existsSync, mkdirSync } from 'fs';
   import path from 'path';
   import passport from './middleware/passport.js';
-
-const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+  import { ensureUploadsDir, UPLOADS_DIR } from './utils/fileUtils.js';
 
 // Create directory if it doesn't exist
-if (!existsSync(UPLOADS_DIR)) {
-  mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+ensureUploadsDir(); // ensures uploads exists cross-platform
+console.log(`Uploads directory: ${UPLOADS_DIR}`);
 
   const app = express();
 

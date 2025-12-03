@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import fs from 'fs/promises';
 import path from 'path';
 import { getClient, query } from '../database/index.js';
 import {
@@ -10,11 +9,9 @@ import {
   insertStudentPointRequestQuery,
   getRejectedRequestByIdQuery,
   updateRejectedStudentPointRequestQuery,
-  getStudentPointByIdQuery,
 } from '../database/queries/studentQueries.js';
 import { assertHasUser } from '../utils/assertions.js';
-
-const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+import { safeUnlink, isPathUnderBase } from '../utils/fileUtils.js';
 
 // --- View Requests ---
 export const viewApprovedRequests = async (req: Request, res: Response) => {
@@ -56,35 +53,42 @@ export const viewPendingRequests = async (req: Request, res: Response) => {
 
 // --- Download Proof Document ---
 export const downloadProofDocument = async (req: Request, res: Response) => {
-  assertHasUser(req);
-  const user_id = req.user.user_id;
-  const { point_id } = req.query;
-
-  if (!point_id) return res.status(400).json({ message: 'Missing point_id' });
-
-  // Ensure the request belongs to the student
-  const studentResult = await query('SELECT roll_number FROM students WHERE user_id = $1', [user_id]);
-  if (studentResult.rows.length === 0)
-    return res.status(404).json({ message: 'Student not found' });
-
-  const roll_number = studentResult.rows[0].roll_number;
-  const pointResult = await query(getStudentProofDocumentQuery, [point_id, roll_number]);
-  if (pointResult.rows.length === 0)
-    return res.status(404).json({ message: 'Proof document not found' });
-
-  const filePath = pointResult.rows[0].proof_document;
-  if (!filePath)
-    return res.status(404).json({ message: 'No file uploaded for this request' });
-
-  const absoluteFilePath = path.resolve(filePath);
   try {
-    await fs.access(absoluteFilePath);
-  } catch {
-    return res.status(404).json({ message: 'File not found on server' });
+    assertHasUser(req);
+    const user_id = req.user.user_id;
+    const { point_id } = req.query;
+
+    if (!point_id) return res.status(400).json({ message: 'Missing point_id' });
+
+    // Ensure the request belongs to the student
+    const studentResult = await query('SELECT roll_number FROM students WHERE user_id = $1', [user_id]);
+    if (studentResult.rows.length === 0)
+      return res.status(404).json({ message: 'Student not found' });
+
+    const roll_number = studentResult.rows[0].roll_number;
+    const pointResult = await query(getStudentProofDocumentQuery, [point_id, roll_number]);
+    if (pointResult.rows.length === 0)
+      return res.status(404).json({ message: 'Proof document not found' });
+
+    const filePathFromDb = pointResult.rows[0].proof_document;
+    if (!filePathFromDb)
+      return res.status(404).json({ message: 'No file uploaded for this request' });
+
+    const absoluteFilePath = path.resolve(filePathFromDb);
+
+    // Prevent path traversal outside uploads
+    if (!isPathUnderBase(absoluteFilePath)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Serve file safely
+    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(absoluteFilePath)}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    return res.sendFile(absoluteFilePath);
+  } catch (err: any) {
+    console.error('Error serving proof document:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
-  res.setHeader('Content-Disposition', `attachment; filename="${path.basename(absoluteFilePath)}"`);
-  res.setHeader('Content-Type', 'application/pdf');
-  res.sendFile(absoluteFilePath);
 };
 
 // --- Submit New Request ---
@@ -145,7 +149,7 @@ export const resubmitRequest = async (req: Request, res: Response) => {
     let proof_document = oldRequest.proof_document;
     if (file) {
       if (proof_document) {
-        try { await fs.unlink(proof_document); } catch {}
+        try { await safeUnlink(proof_document); } catch {}
       }
       proof_document = path.resolve(file.path);
     }

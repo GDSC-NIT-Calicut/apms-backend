@@ -24,6 +24,7 @@ import {
   validateBulkStudentRow, validateBulkFacultyRow, validateBulkEventOrganizerRow, validateBulkRemoveRow,
   validateEditStudentInput, validateEditFacultyInput, validateEditEventOrganizerInput, validateEditAdminInput
 } from '../middleware/validators.js';
+import { safeUnlink, isPathUnderBase } from '../utils/fileUtils.js';
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
 const DUMMY_FA_EMAIL = '[email protected]';
@@ -32,6 +33,12 @@ const DUMMY_FA_EMAIL = '[email protected]';
 export const bulkRegisterStudents = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
+
+  // Prevent file outside uploads from being processed
+  if (!isPathUnderBase(filePath)) {
+    return res.status(400).json({ message: 'Invalid upload location' });
+  }
+
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
@@ -68,7 +75,8 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    await fs.unlink(filePath);
+    // safe unlink
+    await safeUnlink(filePath);
   }
 };
 
@@ -76,6 +84,12 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
 export const bulkRegisterFaculty = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
+
+  // Prevent file outside uploads from being processed
+  if (!isPathUnderBase(filePath)) {
+    return res.status(400).json({ message: 'Invalid upload location' });
+  }
+
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
@@ -103,7 +117,8 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    await fs.unlink(filePath);
+    // safe unlink
+    await safeUnlink(filePath);
   }
 };
 
@@ -111,6 +126,12 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
 export const bulkRegisterEventOrganizers = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
+
+  // Prevent file outside uploads from being processed
+  if (!isPathUnderBase(filePath)) {
+    return res.status(400).json({ message: 'Invalid upload location' });
+  }
+
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
@@ -138,10 +159,10 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    await fs.unlink(filePath);
+    // safe unlink
+    await safeUnlink(filePath);
   }
 };
-
 
 
 
