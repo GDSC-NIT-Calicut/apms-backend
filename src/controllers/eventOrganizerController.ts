@@ -21,8 +21,7 @@ import { assertHasUser } from '../utils/assertions.js';
 import { isPathUnderBase, safeUnlink } from '../utils/fileUtils.js';
 
 // Helper to parse CSV file
-const parseCSV = (fileBuffer: Buffer): AllocationCSVRow[] => {
-  // parse using header names (order-insensitive), require 'roll_number' and 'points'
+const parseCSV = (fileBuffer: Buffer): { records: AllocationCSVRow[]; errors: string[] } => {
   const raw = parse(fileBuffer, {
     columns: true,
     skip_empty_lines: true,
@@ -30,26 +29,45 @@ const parseCSV = (fileBuffer: Buffer): AllocationCSVRow[] => {
     trim: true
   }) as Record<string, string>[];
 
-  if (!raw || raw.length === 0) return [];
+  const errors: string[] = [];
+  const records: AllocationCSVRow[] = [];
 
-  // Ensure headers include required columns (case-insensitive)
-  const headerKeys = Object.keys(raw[0]).map(k => k.toLowerCase().trim());
-  if (!headerKeys.includes('roll_number') || !headerKeys.includes('points')) {
-    throw new Error('CSV must contain headers: roll_number and points');
+  if (!raw || raw.length === 0) {
+    errors.push('CSV is empty');
+    return { records, errors };
   }
 
-  return raw.map((row, idx) => {
+  const headerKeys = Object.keys(raw[0]).map(k => k.toLowerCase().trim());
+  if (!headerKeys.includes('roll_number') || !headerKeys.includes('points')) {
+    errors.push('CSV must contain headers: roll_number and points');
+    return { records, errors };
+  }
+
+  raw.forEach((row, idx) => {
     const rollKey = Object.keys(row).find(k => k.toLowerCase().trim() === 'roll_number')!;
     const pointsKey = Object.keys(row).find(k => k.toLowerCase().trim() === 'points')!;
 
-    const roll_number = String(row[rollKey]).trim();
-    const points = Number(String(row[pointsKey]).trim());
+    const roll_number = String(row[rollKey] ?? '').trim();
+    const pointsRaw = String(row[pointsKey] ?? '').trim();
+    const points = Number(pointsRaw);
 
-    if (!roll_number) throw new Error(`Missing roll_number at CSV row ${idx + 2}`);
-    if (isNaN(points)) throw new Error(`Invalid points value at CSV row ${idx + 2}: ${row[pointsKey]}`);
+    if (!roll_number) {
+      errors.push(`Row ${idx + 2}: missing roll_number`);
+      return;
+    }
+    if (pointsRaw === '') {
+      errors.push(`Row ${idx + 2}: missing points`);
+      return;
+    }
+    if (isNaN(points)) {
+      errors.push(`Row ${idx + 2}: invalid points value '${pointsRaw}'`);
+      return;
+    }
 
-    return { roll_number, points };
+    records.push({ roll_number, points });
   });
+
+  return { records, errors };
 };
 
 
@@ -58,14 +76,16 @@ export const allocatePoints = async (req: Request, res: Response) => {
   const client = await getClient();
 
   try {
-    await client.query('BEGIN');
-
     const { event_name, event_type, event_date } = req.body;
     const file = req.file;
 
-    if (!file) throw new Error('No file uploaded');
+    if (!file) {
+      client.release();
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
     if (!event_name || !event_type || !event_date) {
-      throw new Error('Missing event details');
+      client.release();
+      return res.status(400).json({ message: 'Missing event details' });
     }
 
     const user_id = req.user.user_id;
@@ -75,14 +95,24 @@ export const allocatePoints = async (req: Request, res: Response) => {
     );
 
     if (organizerResult.rows.length === 0) {
-      throw new Error('Organizer not found');
+      client.release();
+      return res.status(404).json({ message: 'Organizer not found' });
     }
 
     const organizer_id = organizerResult.rows[0].organizer_id;
 
+    // begin transaction AFTER validations/organizer lookup
+    await client.query('BEGIN');
+
     // Read the file from disk and parse CSV
     const fileBuffer = await fs.readFile(file.path);
-    const records: AllocationCSVRow[] = parseCSV(fileBuffer);
+    const { records, errors } = parseCSV(fileBuffer);
+
+    if (errors.length > 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'CSV format error', errors });
+    }
 
     // Process student points
     for (const record of records) {
@@ -101,7 +131,9 @@ export const allocatePoints = async (req: Request, res: Response) => {
     // Get absolute path for consistent storage and ensure it's inside uploads dir
     const absoluteFilePath = path.resolve(file.path);
     if (!isPathUnderBase(absoluteFilePath)) {
-      throw new Error('Invalid file path (outside uploads dir)');
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'Invalid file path (outside uploads dir)' });
     }
 
     // Insert allocation record with ABSOLUTE path
@@ -123,12 +155,12 @@ export const allocatePoints = async (req: Request, res: Response) => {
       allocation: allocationResult.rows[0],
       students_allocated: records.length
     });
-  } catch (error) {
-    await client.query('ROLLBACK');
+  } catch (error: any) {
+    try { await client.query('ROLLBACK'); } catch {}
     console.error('Allocation error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: error?.message || 'Internal server error' });
   } finally {
-    client.release();
+    try { client.release(); } catch {}
   }
 };
 
@@ -234,6 +266,8 @@ export const revokeAllocation = async (req: Request, res: Response) => {
     const { allocation_id } = req.body;
 
     if (!allocation_id) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
 
@@ -244,6 +278,8 @@ export const revokeAllocation = async (req: Request, res: Response) => {
     );
 
     if (organizerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Organizer not found' });
     }
 
@@ -256,24 +292,35 @@ export const revokeAllocation = async (req: Request, res: Response) => {
     );
 
     if (allocationResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Allocation not found' });
     }
 
     const allocation: EventOrganizerAllocation = allocationResult.rows[0];
 
     if (allocation.status === 'revoked') {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'Allocation already revoked' });
     }
 
     // Validate file path before reading
     const absoluteFilePath = path.resolve(allocation.file_path);
     if (!isPathUnderBase(absoluteFilePath)) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(403).json({ message: 'Access denied' });
     }
 
     // Parse CSV to get roll numbers
     const fileBuffer = await fs.readFile(absoluteFilePath);
-    const records: AllocationCSVRow[] = parseCSV(fileBuffer);
+    const { records, errors } = parseCSV(fileBuffer);
+    if (errors.length > 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'CSV format error', errors });
+    }
     const rollNumbers = records.map(r => r.roll_number);
 
     // Delete student points
@@ -319,10 +366,14 @@ export const reallocatePoints = async (req: Request, res: Response) => {
     const file = req.file;
 
     if (!allocation_id) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
 
     if (!file && !event_name && !event_type && !event_date) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'No changes provided' });
     }
 
@@ -333,6 +384,8 @@ export const reallocatePoints = async (req: Request, res: Response) => {
     );
 
     if (organizerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Organizer not found' });
     }
 
@@ -345,6 +398,8 @@ export const reallocatePoints = async (req: Request, res: Response) => {
     );
 
     if (allocationResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Allocation not found' });
     }
 
@@ -357,16 +412,30 @@ export const reallocatePoints = async (req: Request, res: Response) => {
     if (file) {
       // Parse new CSV
       const newFileBuffer = await fs.readFile(file.path);
-      records = parseCSV(newFileBuffer);
+      const parsed = parseCSV(newFileBuffer);
+      if (parsed.errors.length > 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ message: 'CSV format error', errors: parsed.errors });
+      }
+      records = parsed.records;
       newFilePath = file.path;
     } else {
       // Use existing file (ensure safe path)
       const absPath = path.resolve(allocation.file_path);
       if (!isPathUnderBase(absPath)) {
-        throw new Error('Invalid file path (outside uploads dir)');
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ message: 'Invalid file path (outside uploads dir)' });
       }
       const oldFileBuffer = await fs.readFile(absPath);
-      records = parseCSV(oldFileBuffer);
+      const parsedOld = parseCSV(oldFileBuffer);
+      if (parsedOld.errors.length > 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ message: 'CSV format error', errors: parsedOld.errors });
+      }
+      records = parsedOld.records;
     }
 
     // Determine actual event details to use
@@ -378,10 +447,18 @@ export const reallocatePoints = async (req: Request, res: Response) => {
     if (allocation.status === 'allocated') {
       const absOldPath = path.resolve(allocation.file_path);
       if (!isPathUnderBase(absOldPath)) {
-        throw new Error('Invalid file path (outside uploads dir)');
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ message: 'Invalid file path (outside uploads dir)' });
       }
       const oldFileBuffer = await fs.readFile(absOldPath);
-      const oldRecords: AllocationCSVRow[] = parseCSV(oldFileBuffer);
+      const parsedOld2 = parseCSV(oldFileBuffer);
+      if (parsedOld2.errors.length > 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ message: 'CSV format error', errors: parsedOld2.errors });
+      }
+      const oldRecords: AllocationCSVRow[] = parsedOld2.records;
       const oldRollNumbers = oldRecords.map(r => r.roll_number);
 
       await client.query(
@@ -454,10 +531,14 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     const { allocation_id, event_name, event_type, event_date } = req.body;
 
     if (!allocation_id) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'Missing allocation_id' });
     }
 
     if (!event_name && !event_type && !event_date) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({ message: 'No changes provided' });
     }
 
@@ -468,6 +549,8 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     );
 
     if (organizerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Organizer not found' });
     }
 
@@ -480,6 +563,8 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     );
 
     if (allocationResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Allocation not found' });
     }
 
@@ -487,6 +572,8 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
 
     // Check if allocation is revoked
     if (allocation.status === 'revoked') {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(400).json({
         message: 'Cannot update details of revoked allocations. Use reallocate instead.'
       });
@@ -507,18 +594,28 @@ export const updateAllocationDetails = async (req: Request, res: Response) => {
     );
 
     if (updatedAllocation.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ message: 'Allocation not found' });
     }
 
     // Ensure file path is valid before reading
     const absPath = path.resolve(allocation.file_path);
     if (!isPathUnderBase(absPath)) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(403).json({ message: 'Access denied' });
     }
 
     // Read the CSV file to get roll numbers
     const fileBuffer = await fs.readFile(absPath);
-    const records: AllocationCSVRow[] = parseCSV(fileBuffer);
+    const parsed = parseCSV(fileBuffer);
+    if (parsed.errors.length > 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'CSV format error', errors: parsed.errors });
+    }
+    const records: AllocationCSVRow[] = parsed.records;
     const rollNumbers = records.map(r => r.roll_number);
 
     // Update student points for each roll number
