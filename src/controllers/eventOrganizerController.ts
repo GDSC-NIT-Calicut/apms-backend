@@ -22,22 +22,34 @@ import { isPathUnderBase, safeUnlink } from '../utils/fileUtils.js';
 
 // Helper to parse CSV file
 const parseCSV = (fileBuffer: Buffer): AllocationCSVRow[] => {
-  const records = parse(fileBuffer, {
-    columns: ['roll_number', 'points'],
+  // parse using header names (order-insensitive), require 'roll_number' and 'points'
+  const raw = parse(fileBuffer, {
+    columns: true,
     skip_empty_lines: true,
-    from_line: 2, // Skip header row
-    cast: (value, context) => {
-      if (context.column === 'points') {
-        const points = parseInt(value, 10);
-        if (isNaN(points)) {
-          throw new Error(`Invalid points value at line ${context.lines}: ${value}`);
-        }
-        return points;
-      }
-      return value;
-    }
+    from_line: 1,
+    trim: true
+  }) as Record<string, string>[];
+
+  if (!raw || raw.length === 0) return [];
+
+  // Ensure headers include required columns (case-insensitive)
+  const headerKeys = Object.keys(raw[0]).map(k => k.toLowerCase().trim());
+  if (!headerKeys.includes('roll_number') || !headerKeys.includes('points')) {
+    throw new Error('CSV must contain headers: roll_number and points');
+  }
+
+  return raw.map((row, idx) => {
+    const rollKey = Object.keys(row).find(k => k.toLowerCase().trim() === 'roll_number')!;
+    const pointsKey = Object.keys(row).find(k => k.toLowerCase().trim() === 'points')!;
+
+    const roll_number = String(row[rollKey]).trim();
+    const points = Number(String(row[pointsKey]).trim());
+
+    if (!roll_number) throw new Error(`Missing roll_number at CSV row ${idx + 2}`);
+    if (isNaN(points)) throw new Error(`Invalid points value at CSV row ${idx + 2}: ${row[pointsKey]}`);
+
+    return { roll_number, points };
   });
-  return records;
 };
 
 
