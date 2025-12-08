@@ -21,45 +21,82 @@ import {
   editAdminByUserIdQuery
 } from '../database/queries/index.js';
 import {
-  validateBulkStudentRow, validateBulkFacultyRow, validateBulkEventOrganizerRow, validateBulkRemoveRow,
-  validateEditStudentInput, validateEditFacultyInput, validateEditEventOrganizerInput, validateEditAdminInput
+  validateBulkStudentRow,
+  validateBulkFacultyRow,
+  validateBulkEventOrganizerRow,
+  validateBulkRemoveRow
 } from '../middleware/validators.js';
 import { safeUnlink, isPathUnderBase } from '../utils/fileUtils.js';
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
 const DUMMY_FA_EMAIL = '[email protected]';
 
+// helper: normalize header text to expected key form
+const normalizeKey = (s: string) =>
+  s.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+
+// build a row object with expected keys mapped from arbitrary csv headers
+const mapRowToKeys = (rawRow: Record<string, any>, expectedKeys: string[]) => {
+  const normMap: Record<string, any> = {};
+  Object.keys(rawRow).forEach(k => {
+    normMap[normalizeKey(k)] = rawRow[k];
+  });
+  const mapped: Record<string, any> = {};
+  expectedKeys.forEach(k => {
+    mapped[k] = normMap[k];
+  });
+  return mapped;
+};
+
+// parse CSV with headers and produce normalized rows (any column order)
+const parseCsvFlexible = (fileBuffer: string) => {
+  // parse with columns:true so we get header-based objects
+  const rawRows = parse(fileBuffer, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true
+  }) as Record<string, any>[];
+  return rawRows;
+};
+
 // --- Bulk Register Students ---
+// Controller now handles parsing + per-row validation using validators
 export const bulkRegisterStudents = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
 
-  // Prevent file outside uploads from being processed
   if (!isPathUnderBase(filePath)) {
+    await safeUnlink(filePath);
     return res.status(400).json({ message: 'Invalid upload location' });
   }
 
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
-    const records = parse(fileBuffer, {
-      columns: ['email', 'student_name', 'roll_number', 'department', 'program', 'batch_year', 'fa_name'],
-      skip_empty_lines: true,
-      from_line: 2,
-      cast: (value, context) => {
-        if (context.column === 'batch_year') return Number(value);
-        return value;
+    const rawRows = parseCsvFlexible(fileBuffer);
+
+    // map rows to expected keys (flexible column order)
+    const expectedKeys = ['email', 'student_name', 'roll_number', 'department', 'program', 'batch_year', 'fa_name'];
+    const records = rawRows.map(r => {
+      const mapped = mapRowToKeys(r, expectedKeys);
+      // cast batch_year if present
+      if (mapped.batch_year !== undefined && mapped.batch_year !== null && mapped.batch_year !== '') {
+        mapped.batch_year = Number(mapped.batch_year);
       }
+      return mapped;
     });
+
+    // validate rows using existing validator function
+    for (let i = 0; i < records.length; i++) {
+      const e = validateBulkStudentRow(records[i] as any);
+      if (e) throw new Error(`Row ${i + 1}: ${e}`);
+    }
 
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const error = validateBulkStudentRow(row);
-      if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'student']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      // Create user WITHOUT password
       const userResult = await client.query(createUserQuery, [row.email, 'student']);
       const userId = userResult.rows[0].user_id;
       await client.query(createStudentQuery, [row.roll_number, row.student_name, userId, row.department, row.program, row.batch_year]);
@@ -71,11 +108,10 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.status(201).json({ message: 'All students registered successfully' });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    // safe unlink
     await safeUnlink(filePath);
   }
 };
@@ -85,27 +121,29 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
 
-  // Prevent file outside uploads from being processed
   if (!isPathUnderBase(filePath)) {
+    await safeUnlink(filePath);
     return res.status(400).json({ message: 'Invalid upload location' });
   }
 
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
-    const records = parse(fileBuffer, {
-      columns: ['email', 'fa_name', 'department'],
-      skip_empty_lines: true,
-      from_line: 2
-    });
+    const rawRows = parseCsvFlexible(fileBuffer);
+
+    const expectedKeys = ['email', 'fa_name', 'department'];
+    const records = rawRows.map(r => mapRowToKeys(r, expectedKeys));
+
+    for (let i = 0; i < records.length; i++) {
+      const e = validateBulkFacultyRow(records[i] as any);
+      if (e) throw new Error(`Row ${i + 1}: ${e}`);
+    }
+
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const error = validateBulkFacultyRow(row);
-      if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'faculty_advisor']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      // Create user WITHOUT password
       const userResult = await client.query(createUserQuery, [row.email, 'faculty_advisor']);
       const userId = userResult.rows[0].user_id;
       await client.query(createFacultyAdvisorQuery, [row.fa_name, userId, row.department]);
@@ -113,11 +151,10 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.status(201).json({ message: 'All faculty registered successfully' });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    // safe unlink
     await safeUnlink(filePath);
   }
 };
@@ -127,27 +164,29 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
 
-  // Prevent file outside uploads from being processed
   if (!isPathUnderBase(filePath)) {
+    await safeUnlink(filePath);
     return res.status(400).json({ message: 'Invalid upload location' });
   }
 
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
-    const records = parse(fileBuffer, {
-      columns: ['email', 'organizer_name', 'organization_name'],
-      skip_empty_lines: true,
-      from_line: 2
-    });
+    const rawRows = parseCsvFlexible(fileBuffer);
+
+    const expectedKeys = ['email', 'organizer_name', 'organization_name'];
+    const records = rawRows.map(r => mapRowToKeys(r, expectedKeys));
+
+    for (let i = 0; i < records.length; i++) {
+      const e = validateBulkEventOrganizerRow(records[i] as any);
+      if (e) throw new Error(`Row ${i + 1}: ${e}`);
+    }
+
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const error = validateBulkEventOrganizerRow(row);
-      if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'event_organizer']);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
-      // Create user WITHOUT password
       const userResult = await client.query(createUserQuery, [row.email, 'event_organizer']);
       const userId = userResult.rows[0].user_id;
       await client.query(createEventOrganizerQuery, [row.organizer_name, userId, row.organization_name]);
@@ -155,34 +194,40 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
     await client.query('COMMIT');
     res.status(201).json({ message: 'All event organizers registered successfully' });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     res.status(400).json({ message: 'Bulk registration failed', error: err.message });
   } finally {
     client.release();
-    // safe unlink
     await safeUnlink(filePath);
   }
 };
-
-
 
 // --- Bulk Remove Users ---
 export const bulkRemoveUsers = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
+
+  if (!isPathUnderBase(filePath)) {
+    await safeUnlink(filePath);
+    return res.status(400).json({ message: 'Invalid upload location' });
+  }
+
   const client = await getClient();
   try {
     const fileBuffer = await fs.readFile(filePath, 'utf8');
-    const records = parse(fileBuffer, {
-      columns: ['email'],
-      skip_empty_lines: true,
-      from_line: 2
-    });
+    const rawRows = parseCsvFlexible(fileBuffer);
+
+    const expectedKeys = ['email'];
+    const records = rawRows.map(r => mapRowToKeys(r, expectedKeys));
+
+    for (let i = 0; i < records.length; i++) {
+      const e = validateBulkRemoveRow(records[i] as any);
+      if (e) throw new Error(`Row ${i + 1}: ${e}`);
+    }
+
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const error = validateBulkRemoveRow(row);
-      if (error) throw new Error(`Row ${i + 1}: ${error}`);
       const email = row.email;
       if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) throw new Error(`Row ${i + 1}: Cannot remove super admin or dummy FA`);
       const userRes = await client.query(getUserByEmailQuery, [email]);
@@ -202,21 +247,20 @@ export const bulkRemoveUsers = async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.status(200).json({ message: 'Bulk removal successful' });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     res.status(400).json({ message: 'Bulk removal failed', error: err.message });
   } finally {
     client.release();
-    await fs.unlink(filePath);
+    await safeUnlink(filePath);
   }
 };
 
-// --- Edit Student (by email) ---
+// --- Edit Student (email in body) ---
 export const editStudentDetails = async (req: Request, res: Response) => {
-  const email = decodeURIComponent(req.params.email);
+  const email = req.body.email;
+  if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
-  const error = validateEditStudentInput(input);
-  if (error) return res.status(400).json({ message: error });
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);
@@ -249,13 +293,12 @@ export const editStudentDetails = async (req: Request, res: Response) => {
   }
 };
 
-// --- Edit Faculty (by email) ---
+// --- Edit Faculty (email in body) ---
 export const editFacultyDetails = async (req: Request, res: Response) => {
-  const email = decodeURIComponent(req.params.email);
+  const email = req.body.email;
+  if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
-  const error = validateEditFacultyInput(input);
-  if (error) return res.status(400).json({ message: error });
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);
@@ -273,13 +316,12 @@ export const editFacultyDetails = async (req: Request, res: Response) => {
   }
 };
 
-// --- Edit Event Organizer (by email) ---
+// --- Edit Event Organizer (email in body) ---
 export const editEventOrganizerDetails = async (req: Request, res: Response) => {
-  const email = decodeURIComponent(req.params.email);
+  const email = req.body.email;
+  if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
-  const error = validateEditEventOrganizerInput(input);
-  if (error) return res.status(400).json({ message: error });
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);
@@ -297,13 +339,12 @@ export const editEventOrganizerDetails = async (req: Request, res: Response) => 
   }
 };
 
-// --- Edit Admin (by email) ---
+// --- Edit Admin (email in body) ---
 export const editAdminDetails = async (req: Request, res: Response) => {
-  const email = decodeURIComponent(req.params.email);
+  const email = req.body.email;
+  if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
-  const error = validateEditAdminInput(input);
-  if (error) return res.status(400).json({ message: error });
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);

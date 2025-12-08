@@ -68,6 +68,5 @@ console.log(`Uploads directory: ${UPLOADS_DIR}`);
   app.use('/api/admin',adminRoutes);
 
 
- 
 
   export default app;

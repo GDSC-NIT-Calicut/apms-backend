@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { LoginCredentials,isUserRole, BulkRegisterStudentRow, BulkRegisterFacultyRow, BulkRegisterEventOrganizerRow, BulkRemoveRow,
+import { isUserRole, BulkRegisterStudentRow, BulkRegisterFacultyRow, BulkRegisterEventOrganizerRow, BulkRemoveRow,
   EditStudentInput, EditFacultyInput, EditEventOrganizerInput, EditAdminInput } from '../types/index.js';
 
 export const validateLoginInput = (req: Request, res: Response, next: NextFunction) => {
