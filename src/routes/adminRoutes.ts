@@ -1,19 +1,36 @@
 import express from 'express';
 import multer from 'multer';
 import { UPLOADS_DIR } from '../utils/fileUtils.js';
-import * as adminController from '../controllers/adminController.js';
+import {
+  bulkRegisterStudents,
+  bulkRegisterFaculty,
+  bulkRegisterEventOrganizers,
+  bulkRemoveUsers,
+  editStudentDetails,
+  editFacultyDetails,
+  editEventOrganizerDetails,
+  editAdminDetails
+} from '../controllers/adminController.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
+import {
+  validateEditStudentInput,
+  validateEditFacultyInput,
+  validateEditEventOrganizerInput,
+  validateEditAdminInput
+} from '../middleware/validators.js';
 
-const upload = multer({ dest: UPLOADS_DIR }); // use absolute dir, cross-platform
+const upload = multer({ dest: UPLOADS_DIR });
 const router = express.Router();
 
-//also in csv files order of columns is important
+// Bulk register / remove routes (file upload)
+// CSV parsing + row validation moved to controller.
+// Routes only handle auth + file upload + call controller.
 router.post(
   '/bulk-register/student',
   authenticate,
   authorize('admin'),
   upload.single('file'),
-  adminController.bulkRegisterStudents
+  bulkRegisterStudents
 );
 
 router.post(
@@ -21,7 +38,7 @@ router.post(
   authenticate,
   authorize('admin'),
   upload.single('file'),
-  adminController.bulkRegisterFaculty
+  bulkRegisterFaculty
 );
 
 router.post(
@@ -29,7 +46,7 @@ router.post(
   authenticate,
   authorize('admin'),
   upload.single('file'),
-  adminController.bulkRegisterEventOrganizers
+  bulkRegisterEventOrganizers
 );
 
 router.post(
@@ -37,46 +54,41 @@ router.post(
   authenticate,
   authorize('admin'),
   upload.single('file'),
-  adminController.bulkRemoveUsers
+  bulkRemoveUsers
 );
 
-//req.params is used for email other data is in body(i.e fields to be edited)
-//also remember to set header for content-type application/json
-//ex url http://localhost:3000/api/admin/edit/student/student1@nitc.ac.in
-//frontend must url encode this
-//   like const email = 'student1@nitc.ac.in';
-// const encodedEmail = encodeURIComponent(email); // 'student1%40nitc.ac.in'
-// const url = `/api/admin/edit/student/${encodedEmail}`;
-
+// Edit endpoints — email must be provided in req.body.email (not req.params)
+// Validators run as route middleware.
 router.patch(
-  '/edit/student/:email',
+  '/edit/student',
   authenticate,
   authorize('admin'),
-  adminController.editStudentDetails
+  validateEditStudentInput,
+  editStudentDetails
 );
 
-//req.params is used for email other data is in body(i.e fields to be edited)
 router.patch(
-  '/edit/faculty/:email',
+  '/edit/faculty',
   authenticate,
   authorize('admin'),
-  adminController.editFacultyDetails
+  validateEditFacultyInput,
+  editFacultyDetails
 );
 
-//req.params is used for email other data is in body(i.e fields to be edited)
 router.patch(
-  '/edit/event-organizer/:email',
+  '/edit/event-organizer',
   authenticate,
   authorize('admin'),
-  adminController.editEventOrganizerDetails
+  validateEditEventOrganizerInput,
+  editEventOrganizerDetails
 );
 
-//req.params is used for email other data is in body(i.e fields to be edited )
 router.patch(
-  '/edit/admin/:email',
+  '/edit/admin',
   authenticate,
   authorize('admin'),
-  adminController.editAdminDetails
+  validateEditAdminInput,
+  editAdminDetails
 );
 
 export default router;
