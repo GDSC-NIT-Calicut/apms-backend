@@ -40,7 +40,7 @@ const pnum = (v: any) => {
 };
 
 export const validateRegisterInput = (req: Request, res: Response, next: NextFunction) => {
-  const { email, role } = req.body;
+  const { email} = req.body;
 
   // Check email presence and type
   if (!email || typeof email !== 'string') {
@@ -50,13 +50,6 @@ export const validateRegisterInput = (req: Request, res: Response, next: NextFun
   // Check email domain
   if (!email.endsWith('@nitc.ac.in')) {
     return res.status(400).json({ message: 'Only NITC emails allowed' });
-  }
-
-  // REMOVED password validation entirely
-
-  // Check role validity
-  if (!role || !isUserRole(role)) {
-    return res.status(400).json({ message: 'Invalid or missing user role' });
   }
 
   next();
@@ -325,23 +318,36 @@ export function validateBulkRemoveRow(row: BulkRemoveRow): string | null {
   return null;
 }
 
-export function validateEditStudentInput(input: EditStudentInput): string | null {
-  if (input.department && !DEPARTMENT_CODES.includes(input.department)) return 'Invalid department';
-  if (input.program && !PROGRAMS.includes(input.program)) return 'Invalid program';
-  if (input.batch_year && typeof input.batch_year !== 'number') return 'Invalid batch_year';
-  return null;
-}
+// --- Edit validators: middleware that respond with errors ---
+export const validateEditStudentInput = (req: Request, res: Response, next: NextFunction) => {
+  const input = req.body;
+  
+  if (input.department && !DEPARTMENT_CODES.includes(input.department)) {
+    return res.status(400).json({ message: 'Invalid department' });
+  }
+  if (input.program && !PROGRAMS.includes(input.program)) {
+    return res.status(400).json({ message: 'Invalid program' });
+  }
+  if (input.batch_year && typeof input.batch_year !== 'number') {
+    return res.status(400).json({ message: 'Invalid batch_year' });
+  }
+  next();
+};
 
-export function validateEditFacultyInput(input: EditFacultyInput): string | null {
-  if (input.department && !DEPARTMENT_CODES.includes(input.department)) return 'Invalid department';
-  return null;
-}
+export const validateEditFacultyInput = (req: Request, res: Response, next: NextFunction) => {
+  const input = req.body;
+  
+  if (input.department && !DEPARTMENT_CODES.includes(input.department)) {
+    return res.status(400).json({ message: 'Invalid department' });
+  }
+  next();
+};
 
-export function validateEditEventOrganizerInput(input: EditEventOrganizerInput): string | null {
-  return null;
-}
+export const validateEditEventOrganizerInput = (req: Request, res: Response, next: NextFunction) => {
+  next();
+};
 
-export function validateEditAdminInput(input: EditAdminInput): string | null {
-  return null;
-}
+export const validateEditAdminInput = (req: Request, res: Response, next: NextFunction) => {
+  next();
+};
 

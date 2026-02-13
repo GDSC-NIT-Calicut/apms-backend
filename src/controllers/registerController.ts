@@ -16,12 +16,12 @@ export const registerStudentController = async (req: Request, res: Response) => 
   const client = await pool.connect();
   try {
     const {
-      email, role,
+      email,
       roll_number, student_name, department, program, batch_year, fa_name
     } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
+    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'student']);
     if ((userCheck.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'User with this email and role already exists' });
     }
@@ -29,7 +29,7 @@ export const registerStudentController = async (req: Request, res: Response) => 
     await client.query('BEGIN');
 
     // Create user WITHOUT password
-    const userResult = await client.query(createUserQuery, [email, role]);
+    const userResult = await client.query(createUserQuery, [email, 'student']);
     const userId = userResult.rows[0].user_id;
 
     // Create student
@@ -62,10 +62,10 @@ export const registerStudentController = async (req: Request, res: Response) => 
 export const registerAdminController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, role, admin_name } = req.body;
+    const { email, admin_name } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
+    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'admin']);
     if ((userCheck.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'User with this email and role already exists' });
     }
@@ -73,7 +73,7 @@ export const registerAdminController = async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     // Create user WITHOUT password
-    const userResult = await client.query(createUserQuery, [email, role]);
+    const userResult = await client.query(createUserQuery, [email, 'admin']);
     const userId = userResult.rows[0].user_id;
 
     // Create admin
@@ -93,10 +93,10 @@ export const registerAdminController = async (req: Request, res: Response) => {
 export const registerEventOrganizerController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, role, organizer_name, organization_name } = req.body;
+    const { email, organizer_name, organization_name } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
+    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'event_organizer']);
     if ((userCheck.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'User with this email and role already exists' });
     }
@@ -104,7 +104,7 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
     await client.query('BEGIN');
 
     // Create user WITHOUT password
-    const userResult = await client.query(createUserQuery, [email, role]);
+    const userResult = await client.query(createUserQuery, [email, 'event_organizer']);
     const userId = userResult.rows[0].user_id;
 
     // Create event organizer
@@ -124,10 +124,10 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
 export const registerFacultyAdvisorController = async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const { email, role, fa_name, department } = req.body;
+    const { email, fa_name, department } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, role]);
+    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'faculty_advisor']);
     if ((userCheck.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'User with this email and role already exists' });
     }
@@ -135,7 +135,7 @@ export const registerFacultyAdvisorController = async (req: Request, res: Respon
     await client.query('BEGIN');
 
     // Create user WITHOUT password
-    const userResult = await client.query(createUserQuery, [email, role]);
+    const userResult = await client.query(createUserQuery, [email, 'faculty_advisor']);
     const userId = userResult.rows[0].user_id;
 
     // Create faculty advisor
