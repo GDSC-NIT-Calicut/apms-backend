@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pool } from '../database/index.js';
+import { getClient } from '../database/index.js';
 import {
   checkUserByEmailAndRoleQuery,
   createUserQuery,
@@ -13,7 +13,7 @@ import {
 
 // --- Student Registration ---
 export const registerStudentController = async (req: Request, res: Response) => {
-  const client = await pool.connect();
+  const client = await getClient();
   try {
     const {
       email,
@@ -60,7 +60,7 @@ export const registerStudentController = async (req: Request, res: Response) => 
 
 // --- Admin Registration ---
 export const registerAdminController = async (req: Request, res: Response) => {
-  const client = await pool.connect();
+  const client = await getClient();
   try {
     const { email, admin_name } = req.body;
 
@@ -91,7 +91,7 @@ export const registerAdminController = async (req: Request, res: Response) => {
 
 // --- Event Organizer Registration ---
 export const registerEventOrganizerController = async (req: Request, res: Response) => {
-  const client = await pool.connect();
+  const client = await getClient();
   try {
     const { email, organizer_name, organization_name } = req.body;
 
@@ -122,7 +122,7 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
 
 // --- Faculty Advisor Registration ---
 export const registerFacultyAdvisorController = async (req: Request, res: Response) => {
-  const client = await pool.connect();
+  const client = await getClient();
   try {
     const { email, fa_name, department } = req.body;
 

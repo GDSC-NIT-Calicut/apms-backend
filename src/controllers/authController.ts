@@ -50,7 +50,7 @@ import { Request, Response } from 'express';
       if (!req.user) {
         return res.status(401).json({ message: 'OAuth authentication failed' });
       }
-      const dbUser = req.user as any; // Ensure user type
+      const dbUser = req.user as any; // Ensure user type and this is comming from middleware/passport.ts where we are returning user object with email and role after querying with db
 
       // 2. Handle NITC domain check (redundant if already in strategy, but extra safe)
       if (!dbUser.email.endsWith('@nitc.ac.in')) {
