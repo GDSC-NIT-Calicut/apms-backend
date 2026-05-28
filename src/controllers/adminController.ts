@@ -61,6 +61,7 @@ const parseCsvFlexible = (fileBuffer: string) => {
 
 // --- Bulk Register Students ---
 // Controller now handles parsing + per-row validation using validators
+// Department and program are extracted from roll_number by validator
 export const bulkRegisterStudents = async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'CSV file is required' });
   const filePath = path.resolve(req.file.path);
@@ -76,7 +77,8 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
     const rawRows = parseCsvFlexible(fileBuffer);
 
     // map rows to expected keys (flexible column order)
-    const expectedKeys = ['email', 'student_name', 'roll_number', 'department', 'program', 'batch_year', 'fa_name'];
+    // Note: department and program are now extracted from roll_number by validator
+    const expectedKeys = ['email', 'student_name', 'roll_number', 'batch_year', 'fa_name'];
     const records = rawRows.map(r => {
       const mapped = mapRowToKeys(r, expectedKeys);
       // cast batch_year if present
@@ -87,6 +89,7 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
     });
 
     // validate rows using existing validator function
+    // Validator will extract department and program from roll_number and set them in the row
     for (let i = 0; i < records.length; i++) {
       const e = validateBulkStudentRow(records[i] as any);
       if (e) throw new Error(`Row ${i + 1}: ${e}`);
@@ -267,12 +270,16 @@ export const editStudentDetails = async (req: Request, res: Response) => {
     if ((userRes.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Student not found' });
     const { user_id, role } = userRes.rows[0];
     if (role !== 'student') return res.status(400).json({ message: 'User is not a student' });
+    
+    // When roll_number is edited, department and program are extracted by validator
     const result = await client.query(
       editStudentByUserIdQuery,
       [input.student_name, input.department, input.roll_number, input.program, input.batch_year, user_id]
     );
     if ((result.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Student not found' });
+    
     if (input.fa_name) {
+      // Use extracted department from validator if roll_number was updated, otherwise use provided/existing department
       const department = input.department || result.rows[0].department;
       const faResult = await client.query(findFacultyAdvisorQuery, [input.fa_name, department]);
       let faId;
@@ -282,9 +289,11 @@ export const editStudentDetails = async (req: Request, res: Response) => {
       } else {
         faId = faResult.rows[0].fa_id;
       }
+      // Use the updated roll_number if provided, otherwise use existing one
+      const rollNumber = input.roll_number || result.rows[0].roll_number;
       await client.query(
         'UPDATE student_faculty_mapping SET fa_id = $1 WHERE student_roll_number = $2',
-        [faId, result.rows[0].roll_number]
+        [faId, rollNumber]
       );
     }
     res.status(200).json({ message: 'Student updated successfully', student: result.rows[0] });

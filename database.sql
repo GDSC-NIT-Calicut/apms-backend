@@ -123,22 +123,22 @@ ON CONFLICT (email) DO NOTHING;
 
 -- Insert dummy faculty advisor for each department (repeat for all departments)
 INSERT INTO faculty_advisors (fa_name, user_id, department)
-SELECT 'No FA Assigned', user_id, 'CS'
+SELECT 'no fa assigned', user_id, 'cs'
 FROM users WHERE email = '[email protected]'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO faculty_advisors (fa_name, user_id, department)
-SELECT 'No FA Assigned', user_id, 'EC'
+SELECT 'no fa assigned', user_id, 'ec'
 FROM users WHERE email = '[email protected]'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO faculty_advisors (fa_name, user_id, department)
-SELECT 'No FA Assigned', user_id, 'EE'
+SELECT 'no fa assigned', user_id, 'ee'
 FROM users WHERE email = '[email protected]'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO faculty_advisors (fa_name, user_id, department)
-SELECT 'No FA Assigned', user_id, 'ME'
+SELECT 'no fa assigned', user_id, 'me'
 FROM users WHERE email = '[email protected]'
 ON CONFLICT DO NOTHING;
 

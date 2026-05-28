@@ -35,6 +35,6 @@ export const config = {
   clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET!,
   callbackURL: process.env.GOOGLE_OAUTH_CALLBACK_URL!,
 },
-frontendURL: 'https://yourfrontend.com/',
+frontendURL: process.env.FRONTEND_URL || 'http://localhost:3000',
 
 };
