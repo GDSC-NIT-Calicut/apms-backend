@@ -33,7 +33,12 @@ import { Request, Response } from 'express';
             path: '/',
           });
 
-          return res.redirect(adminRedirectUrl);
+          //return res.redirect(adminRedirectUrl);
+          return res.json({
+  success: true,
+  role: 'admin',
+  redirect: '/dashboard/admin'
+});
         }
 
         // other authentication flows (if any) go here
