@@ -232,6 +232,12 @@ export const bulkRemoveUsers = async (req: Request, res: Response) => {
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
       const email = row.email;
+      
+      // 🌟 FIX: Check row emails against the active authenticated user token profile context
+      if (email === req.user!.email) {
+        throw new Error(`Row ${i + 1}: Cannot remove yourself in a bulk operation.`);
+      }
+
       if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) throw new Error(`Row ${i + 1}: Cannot remove super admin or dummy FA`);
       const userRes = await client.query(getUserByEmailQuery, [email]);
       if ((userRes.rowCount ?? 0) === 0) throw new Error(`Row ${i + 1}: User not found`);
@@ -258,10 +264,15 @@ export const bulkRemoveUsers = async (req: Request, res: Response) => {
   }
 };
 
-// --- Remove Single User ---
 export const removeSingleUser = async (req: Request, res: Response) => {
   const email = req.body.email;
   if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
+  
+  // 🌟 FIX: Prevent the active administrator from deleting their own account
+  if (email === req.user!.email) {
+    return res.status(400).json({ message: 'Self-deletion is forbidden. You cannot remove your own account.' });
+  }
+
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Cannot remove super admin or dummy FA' });
 
   const client = await getClient();
