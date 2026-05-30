@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getClient } from '../database/index.js';
 import {
-  checkUserByEmailAndRoleQuery,
+  checkUserByEmailQuery,
   createUserQuery,
   createStudentQuery,
   createFacultyAdvisorQuery,
@@ -98,7 +98,7 @@ export const bulkRegisterStudents = async (req: Request, res: Response) => {
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'student']);
+      const userCheck = await client.query(checkUserByEmailQuery, [row.email]);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
       const userResult = await client.query(createUserQuery, [row.email, 'student']);
       const userId = userResult.rows[0].user_id;
@@ -145,7 +145,7 @@ export const bulkRegisterFaculty = async (req: Request, res: Response) => {
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'faculty_advisor']);
+      const userCheck = await client.query(checkUserByEmailQuery, [row.email]);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
       const userResult = await client.query(createUserQuery, [row.email, 'faculty_advisor']);
       const userId = userResult.rows[0].user_id;
@@ -188,7 +188,7 @@ export const bulkRegisterEventOrganizers = async (req: Request, res: Response) =
     await client.query('BEGIN');
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const userCheck = await client.query(checkUserByEmailAndRoleQuery, [row.email, 'event_organizer']);
+      const userCheck = await client.query(checkUserByEmailQuery, [row.email]);
       if ((userCheck.rowCount ?? 0) > 0) throw new Error(`Row ${i + 1}: User already exists`);
       const userResult = await client.query(createUserQuery, [row.email, 'event_organizer']);
       const userId = userResult.rows[0].user_id;
