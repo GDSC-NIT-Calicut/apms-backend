@@ -28,7 +28,8 @@ import {
 } from '../middleware/validators.js';
 import { safeUnlink, isPathUnderBase } from '../utils/fileUtils.js';
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
+import { config } from '../config/environment.js';
+const SUPER_ADMIN_EMAIL = config.hardCodedAdmin.email;
 const DUMMY_FA_EMAIL = '[email protected]';
 
 // helper: normalize header text to expected key form
