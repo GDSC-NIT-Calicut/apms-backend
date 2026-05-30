@@ -67,7 +67,7 @@ export const registerAdminController = async (req: Request, res: Response) => {
     // Check if user exists with same email and role
     const userCheck = await client.query(checkUserByEmailQuery, [email]);
     if ((userCheck.rowCount ?? 0) > 0) {
-      return res.status(409).json({ message: 'User with this email and role already exists' });
+      return res.status(409).json({ message: 'User with this email  already exists' });
     }
 
     await client.query('BEGIN');
