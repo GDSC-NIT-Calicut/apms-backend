@@ -2,29 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { isUserRole, BulkRegisterStudentRow, BulkRegisterFacultyRow, BulkRegisterEventOrganizerRow, BulkRemoveRow,
   EditStudentInput, EditFacultyInput, EditEventOrganizerInput, EditAdminInput } from '../types/index.js';
 
-// --- Helper function to convert all string fields in req.body to lowercase ---
-const convertReqBodyToLowercase = (req: Request) => {
-  const convertValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.toLowerCase();
-    }
-    if (Array.isArray(value)) {
-      return value.map(convertValue);
-    }
-    if (value !== null && typeof value === 'object') {
-      return Object.keys(value).reduce((acc, key) => {
-        acc[key] = convertValue(value[key]);
-        return acc;
-      }, {} as any);
-    }
-    return value;
-  };
-  
-  req.body = convertValue(req.body);
-};
-
 export const validateLoginInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
@@ -106,7 +84,6 @@ const extractDeptAndProgramFromRoll = (roll_number: string): ExtractedRollData =
 };
 
 export const validateRegisterInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { email} = req.body;
 
   // Check email presence and type
@@ -126,7 +103,6 @@ export const validateRegisterInput = (req: Request, res: Response, next: NextFun
 
 // --- Student registration validator ---
 export const validateStudentFields = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { roll_number, student_name, batch_year, fa_name } = req.body;
 
   // Check required fields (department and program are extracted from roll_number)
@@ -166,7 +142,6 @@ export const validateStudentFields = (req: Request, res: Response, next: NextFun
 
 // --- Faculty Advisor registration validator ---
 export const validateFacultyAdvisorFields = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { fa_name, department } = req.body;
   if (!fa_name || typeof fa_name !== 'string') {
     return res.status(400).json({ message: 'fa_name is required and must be a string' });
@@ -179,7 +154,6 @@ export const validateFacultyAdvisorFields = (req: Request, res: Response, next: 
 
 // --- Event Organizer registration validator ---
 export const validateEventOrganizerFields = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { organizer_name, organization_name } = req.body;
   if (!organizer_name || typeof organizer_name !== 'string') {
     return res.status(400).json({ message: 'organizer_name is required and must be a string' });
@@ -192,7 +166,6 @@ export const validateEventOrganizerFields = (req: Request, res: Response, next: 
 
 // --- Admin registration validator ---
 export const validateAdminFields = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { admin_name } = req.body;
   if (!admin_name || typeof admin_name !== 'string') {
     return res.status(400).json({ message: 'admin_name is required and must be a string' });
@@ -202,7 +175,6 @@ export const validateAdminFields = (req: Request, res: Response, next: NextFunct
 
 // --- Event Organizer: Allocation Validator ---
 export const validateAllocatePointsInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { event_name, event_type, event_date } = req.body;
   const file = req.file;
 
@@ -223,7 +195,6 @@ export const validateAllocatePointsInput = (req: Request, res: Response, next: N
 
 // --- Event Organizer: Reallocate Points Validator ---
 export const validateReallocatePointsInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { allocation_id, event_name, event_type, event_date } = req.body;
   const file = req.file;
 
@@ -247,7 +218,6 @@ export const validateReallocatePointsInput = (req: Request, res: Response, next:
 
 // --- Event Organizer: Update Allocation Details Validator ---
 export const validateUpdateAllocationDetailsInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { allocation_id, event_name, event_type, event_date } = req.body;
 
   if (!allocation_id || isNaN(Number(allocation_id))) {
@@ -287,7 +257,6 @@ export const validateDownloadAllocationFileInput = (req: Request, res: Response,
 
 
 export const validateSubmitStudentRequest = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { event_name, event_type, event_date, points } = req.body;
   const file = req.file;
 
@@ -307,7 +276,6 @@ export const validateSubmitStudentRequest = (req: Request, res: Response, next: 
 };
 
 export const validateResubmitStudentRequest = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const { point_id, event_name, event_type, event_date, points } = req.body;
   const file = req.file;
 
@@ -420,7 +388,6 @@ export function validateBulkRemoveRow(row: BulkRemoveRow): string | null {
 
 // --- Edit validators: middleware that respond with errors ---
 export const validateEditStudentInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const input = req.body;
   
   // If roll_number is provided, extract and validate department and program from it
@@ -459,7 +426,6 @@ export const validateEditStudentInput = (req: Request, res: Response, next: Next
 };
 
 export const validateEditFacultyInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   const input = req.body;
   
   if (input.department && !DEPARTMENT_CODES.includes(input.department)) {
@@ -469,12 +435,10 @@ export const validateEditFacultyInput = (req: Request, res: Response, next: Next
 };
 
 export const validateEditEventOrganizerInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   next();
 };
 
 export const validateEditAdminInput = (req: Request, res: Response, next: NextFunction) => {
-  convertReqBodyToLowercase(req);
   next();
 };
 

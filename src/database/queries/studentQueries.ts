@@ -3,7 +3,7 @@ export const getStudentDetailsQuery = `
     s.roll_number, 
     s.student_name, 
     s.department, 
-    s.program, 
+    s.program,  
     s.total_points, 
     s.department_level_points, 
     s.institute_level_points,

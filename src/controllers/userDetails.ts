@@ -33,8 +33,7 @@
           if (Number(user_id) === -1) {
             profile = {
               admin_id: -1,
-              admin_name: config.hardCodedAdmin.name,
-              email: config.hardCodedAdmin.email
+              admin_name: config.hardCodedAdmin.name
             };
           } else {
             profile = (await query(getAdminDetailsQuery, [user_id])).rows[0];
