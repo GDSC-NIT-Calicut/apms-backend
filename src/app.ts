@@ -42,6 +42,58 @@ console.log(`Uploads directory: ${UPLOADS_DIR}`);
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+  // Global middleware to normalize request body to lowercase and clean special characters/spaces
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Helper to normalize string: remove multiple spaces, collapse duplicate special chars, remove spaces around special chars
+    const normalizeString = (str: string): string => {
+      let result = str.trim();
+      let previous;
+      
+      do {
+        previous = result;
+        // Replace multiple consecutive spaces with single space
+        result = result.replace(/ +/g, ' ');
+        // Replace multiple identical special/punctuation chars (with optional spaces between) with single
+        result = result.replace(/([^\w\s])\s*\1+/g, '$1');
+        // Remove spaces before special characters
+        result = result.replace(/\s+([^\w\s])/g, '$1');
+        // Remove spaces after special characters
+        result = result.replace(/([^\w\s])\s+/g, '$1');
+      } while (result !== previous);
+      
+      return result;
+    };
+
+    const convertValue = (value: any, key?: string): any => {
+      // Skip password fields - they are case-sensitive and should not be lowercased
+      if (key === 'password') {
+        return value;
+      }
+
+      if (typeof value === 'string') {
+        // Convert to lowercase, then normalize spaces and special characters
+        return normalizeString(value.toLowerCase());
+      }
+      if (Array.isArray(value)) {
+        return value.map((item) => convertValue(item, key));
+      }
+      if (value !== null && typeof value === 'object') {
+        return Object.keys(value).reduce((acc, objKey) => {
+          acc[objKey] = convertValue(value[objKey], objKey);
+          return acc;
+        }, {} as any);
+      }
+      return value;
+    };
+
+    // Normalize only req.body - query params and URL params are case-sensitive (OAuth, IDs, etc.)
+    if (req.body && typeof req.body === 'object') {
+      req.body = convertValue(req.body);
+    }
+
+    next();
+  });
+
   // Request logging (custom, optional if you use morgan)
   app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);

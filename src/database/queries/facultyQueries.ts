@@ -43,13 +43,20 @@ SELECT proof_document FROM student_points
 WHERE point_id = $1
 `;
 
-// --- View Status of All Students Assigned to FA ---
+// --- Fixed Status Query: Traces user_id mapping dependencies cleanly ---
 export const getFAStudentStatusQuery = `
-SELECT s.student_name, s.roll_number, s.total_points,
-       s.institute_level_points, s.department_level_points, s.fa_assigned_points,s.graduation_eligible
-FROM student_faculty_mapping sfm
+SELECT 
+    s.student_name, 
+    s.roll_number, 
+    s.total_points,
+    s.institute_level_points, 
+    s.department_level_points, 
+    s.fa_assigned_points,
+    s.graduation_eligible
+FROM faculty_advisors fa
+JOIN student_faculty_mapping sfm ON fa.fa_id = sfm.fa_id
 JOIN students s ON sfm.student_roll_number = s.roll_number
-WHERE sfm.fa_id = $1
+WHERE fa.user_id = $1 AND sfm.is_active = TRUE
 ORDER BY s.roll_number
 `;
 
