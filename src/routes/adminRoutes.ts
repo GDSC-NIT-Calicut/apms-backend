@@ -58,7 +58,7 @@ router.post(
   bulkRemoveUsers
 );
 
-router.delete(
+router.post(
   '/remove-user',
   authenticate,
   authorize('admin'),
