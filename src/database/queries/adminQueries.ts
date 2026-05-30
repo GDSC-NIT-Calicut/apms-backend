@@ -20,7 +20,7 @@ export const getFacultyAdvisorByUserIdQuery = `
 export const getDummyFAForDepartmentQuery = `
   SELECT fa_id FROM faculty_advisors fa
   JOIN users u ON fa.user_id = u.user_id
-  WHERE fa.fa_name = 'No FA Assigned' AND fa.department = $1 AND u.email = '[email,protected]'
+  WHERE fa.fa_name = 'No FA Assigned' AND fa.department = $1 AND u.email = '[email protected]'
 `;
 
 export const editStudentByUserIdQuery = `
