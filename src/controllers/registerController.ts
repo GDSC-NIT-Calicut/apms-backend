@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getClient } from '../database/index.js';
 import {
-  checkUserByEmailAndRoleQuery,
+  checkUserByEmailQuery,
   createUserQuery,
   createStudentQuery,
   findFacultyAdvisorQuery,
@@ -21,9 +21,9 @@ export const registerStudentController = async (req: Request, res: Response) => 
     } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'student']);
+    const userCheck = await client.query(checkUserByEmailQuery, [email]);
     if ((userCheck.rowCount ?? 0) > 0) {
-      return res.status(409).json({ message: 'User with this email and role already exists' });
+      return res.status(409).json({ message: 'User with this email  already exists' });
     }
 
     await client.query('BEGIN');
@@ -65,7 +65,7 @@ export const registerAdminController = async (req: Request, res: Response) => {
     const { email, admin_name } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'admin']);
+    const userCheck = await client.query(checkUserByEmailQuery, [email]);
     if ((userCheck.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'User with this email and role already exists' });
     }
@@ -96,9 +96,9 @@ export const registerEventOrganizerController = async (req: Request, res: Respon
     const { email, organizer_name, organization_name } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'event_organizer']);
+    const userCheck = await client.query(checkUserByEmailQuery, [email]);
     if ((userCheck.rowCount ?? 0) > 0) {
-      return res.status(409).json({ message: 'User with this email and role already exists' });
+      return res.status(409).json({ message: 'User with this email  already exists' });
     }
 
     await client.query('BEGIN');
@@ -127,9 +127,9 @@ export const registerFacultyAdvisorController = async (req: Request, res: Respon
     const { email, fa_name, department } = req.body;
 
     // Check if user exists with same email and role
-    const userCheck = await client.query(checkUserByEmailAndRoleQuery, [email, 'faculty_advisor']);
+    const userCheck = await client.query(checkUserByEmailQuery, [email]);
     if ((userCheck.rowCount ?? 0) > 0) {
-      return res.status(409).json({ message: 'User with this email and role already exists' });
+      return res.status(409).json({ message: 'User with this email  already exists' });
     }
 
     await client.query('BEGIN');

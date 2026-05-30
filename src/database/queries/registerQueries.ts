@@ -20,7 +20,7 @@ export const findFacultyAdvisorQuery = `
 // Student-faculty mapping
 export const createStudentFacultyMappingQuery = `
   INSERT INTO student_faculty_mapping (student_roll_number, fa_id)
-  VALUES ($1, $2)
+  VALUES ($1, $2) returning mapping_id
 `;
 
 // Faculty advisor creation
@@ -44,6 +44,7 @@ export const createAdminQuery = `
   RETURNING admin_id
 `;
 
-export const checkUserByEmailAndRoleQuery = `
-  SELECT 1 FROM users WHERE email = $1 AND role = $2
+
+export const checkUserByEmailQuery = `
+  SELECT 1 FROM users WHERE email = $1
 `;
