@@ -258,6 +258,38 @@ export const bulkRemoveUsers = async (req: Request, res: Response) => {
   }
 };
 
+// --- Remove Single User ---
+export const removeSingleUser = async (req: Request, res: Response) => {
+  const email = req.body.email;
+  if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
+  if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Cannot remove super admin or dummy FA' });
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const userRes = await client.query(getUserByEmailQuery, [email]);
+    if ((userRes.rowCount ?? 0) === 0) throw new Error('User not found');
+    const { user_id, role } = userRes.rows[0];
+    if (role === 'faculty_advisor') {
+      const faRes = await client.query(getFacultyAdvisorByUserIdQuery, [user_id]);
+      if ((faRes.rowCount ?? 0) === 0) throw new Error('Faculty advisor not found');
+      const { fa_id, department } = faRes.rows[0];
+      const dummyFARes = await client.query(getDummyFAForDepartmentQuery, [department]);
+      if ((dummyFARes.rowCount ?? 0) === 0) throw new Error('Dummy FA not found for department');
+      const dummyFaId = dummyFARes.rows[0].fa_id;
+      await client.query('UPDATE student_faculty_mapping SET fa_id = $1 WHERE fa_id = $2', [dummyFaId, fa_id]);
+    }
+    await client.query(removeUserByEmailQuery, [email]);
+    await client.query('COMMIT');
+    res.status(200).json({ message: 'User removed successfully' });
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(400).json({ message: 'User removal failed', error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
 // --- Edit Student (email in body) ---
 export const editStudentDetails = async (req: Request, res: Response) => {
   const email = req.body.email;

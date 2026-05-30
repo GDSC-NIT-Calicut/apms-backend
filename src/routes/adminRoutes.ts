@@ -6,6 +6,7 @@ import {
   bulkRegisterFaculty,
   bulkRegisterEventOrganizers,
   bulkRemoveUsers,
+  removeSingleUser,
   editStudentDetails,
   editFacultyDetails,
   editEventOrganizerDetails,
@@ -55,6 +56,13 @@ router.post(
   authorize('admin'),
   upload.single('file'),
   bulkRemoveUsers
+);
+
+router.delete(
+  '/remove-user',
+  authenticate,
+  authorize('admin'),
+  removeSingleUser
 );
 
 // Edit endpoints — email must be provided in req.body.email (not req.params)
