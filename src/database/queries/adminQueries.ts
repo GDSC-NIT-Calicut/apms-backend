@@ -56,3 +56,16 @@ export const editAdminByUserIdQuery = `
   WHERE user_id = $2
   RETURNING *
 `;
+
+// --- Check if faculty has active student mappings ---
+export const countActiveStudentsByFacultyQuery = `
+  SELECT COUNT(*) as active_student_count FROM student_faculty_mapping 
+  WHERE fa_id = $1 AND is_active = TRUE
+`;
+
+// --- Check if real faculty (non-dummy) exists in department ---
+export const checkRealFacultyInDepartmentQuery = `
+  SELECT fa_id, fa_name FROM faculty_advisors 
+  WHERE department = $1 AND fa_name != 'no fa assigned'
+  LIMIT 1
+`;

@@ -18,7 +18,9 @@ import {
   editStudentByUserIdQuery,
   editFacultyByUserIdQuery,
   editEventOrganizerByUserIdQuery,
-  editAdminByUserIdQuery
+  editAdminByUserIdQuery,
+  countActiveStudentsByFacultyQuery,
+  checkRealFacultyInDepartmentQuery
 } from '../database/queries/index.js';
 import {
   validateBulkStudentRow,
@@ -326,12 +328,38 @@ export const editStudentDetails = async (req: Request, res: Response) => {
   if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
+  const confirmDepartmentChange = req.query.confirmDepartmentChange === 'true';
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);
     if ((userRes.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Student not found' });
     const { user_id, role } = userRes.rows[0];
     if (role !== 'student') return res.status(400).json({ message: 'User is not a student' });
+    
+    // Get current student details
+    const currentStudentRes = await client.query(
+      'SELECT * FROM students WHERE user_id = $1',
+      [user_id]
+    );
+    const currentStudent = currentStudentRes.rows[0];
+    
+    // Check if roll_number is being changed (which changes department)
+    const isRollNumberChanging = input.roll_number && input.roll_number !== currentStudent.roll_number;
+    const newDepartment = input.department || currentStudent.department;
+    
+    // If roll number is changing, check if real faculty exists in new department
+    if (isRollNumberChanging) {
+      const realFacultyRes = await client.query(checkRealFacultyInDepartmentQuery, [newDepartment]);
+      const realFacultyExists = (realFacultyRes.rowCount ?? 0) > 0;
+      
+      if (!realFacultyExists && !confirmDepartmentChange) {
+        return res.status(409).json({
+          message: 'Department change requires confirmation',
+          warning: `Student will be assigned to 'Dummy FA' because no real faculty advisors exist in department '${newDepartment}'. If this is intentional, re-submit with query parameter: ?confirmDepartmentChange=true`,
+          requiresConfirmation: true
+        });
+      }
+    }
     
     // When roll_number is edited, department and program are extracted by validator
     const result = await client.query(
@@ -340,14 +368,20 @@ export const editStudentDetails = async (req: Request, res: Response) => {
     );
     if ((result.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Student not found' });
     
+    let warningMessage = null;
+    
     if (input.fa_name) {
       // Use extracted department from validator if roll_number was updated, otherwise use provided/existing department
       const department = input.department || result.rows[0].department;
       const faResult = await client.query(findFacultyAdvisorQuery, [input.fa_name, department]);
       let faId;
+      let assignedFacultyName = input.fa_name;
+      
       if ((faResult.rowCount ?? 0) === 0) {
         const dummyFA = await client.query(getDummyFAForDepartmentQuery, [department]);
         faId = dummyFA.rows[0].fa_id;
+        assignedFacultyName = 'Dummy FA';
+        warningMessage = `Faculty advisor '${input.fa_name}' not found in department '${department}'. Student assigned to 'Dummy FA (${department})' instead.`;
       } else {
         faId = faResult.rows[0].fa_id;
       }
@@ -357,8 +391,24 @@ export const editStudentDetails = async (req: Request, res: Response) => {
         'UPDATE student_faculty_mapping SET fa_id = $1 WHERE student_roll_number = $2',
         [faId, rollNumber]
       );
+    } else if (isRollNumberChanging && !input.fa_name) {
+      // If roll number changed but no faculty specified, check what FA will be assigned
+      const realFacultyRes = await client.query(checkRealFacultyInDepartmentQuery, [newDepartment]);
+      if ((realFacultyRes.rowCount ?? 0) === 0) {
+        warningMessage = `Department changed to '${newDepartment}'. Student assigned to 'Dummy FA (${newDepartment})' since no real faculty advisors exist in this department.`;
+      }
     }
-    res.status(200).json({ message: 'Student updated successfully', student: result.rows[0] });
+    
+    const responseData: any = {
+      message: 'Student updated successfully',
+      student: result.rows[0]
+    };
+    
+    if (warningMessage) {
+      responseData.warning = warningMessage;
+    }
+    
+    res.status(200).json(responseData);
   } finally {
     client.release();
   }
@@ -370,18 +420,65 @@ export const editFacultyDetails = async (req: Request, res: Response) => {
   if (!email || typeof email !== 'string') return res.status(400).json({ message: 'Invalid email parameter' });
   if (email === SUPER_ADMIN_EMAIL || email === DUMMY_FA_EMAIL) return res.status(403).json({ message: 'Editing super admin or dummy FA is not allowed' });
   const input = req.body;
+  const confirmDepartmentChange = req.query.confirmDepartmentChange === 'true';
   const client = await getClient();
   try {
     const userRes = await client.query(getUserByEmailQuery, [email]);
     if ((userRes.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Faculty advisor not found' });
     const { user_id, role } = userRes.rows[0];
     if (role !== 'faculty_advisor') return res.status(400).json({ message: 'User is not a faculty advisor' });
+    
+    // Get current faculty details
+    const currentFacultyRes = await client.query(
+      'SELECT fa_id, department FROM faculty_advisors WHERE user_id = $1',
+      [user_id]
+    );
+    const currentFaculty = currentFacultyRes.rows[0];
+    
+    // Check if department is being changed
+    const isDepartmentChanging = input.department && input.department !== currentFaculty.department;
+    
+    if (isDepartmentChanging) {
+      // Check if this faculty has active students
+      const activeStudentsRes = await client.query(countActiveStudentsByFacultyQuery, [currentFaculty.fa_id]);
+      const activeStudentCount = parseInt(activeStudentsRes.rows[0].active_student_count, 10);
+      
+      if (activeStudentCount > 0 && !confirmDepartmentChange) {
+        return res.status(409).json({
+          message: 'Department change requires confirmation',
+          warning: `This faculty advisor currently has ${activeStudentCount} active student(s). Changing the department will create a mismatch between this faculty's department and their students' departments. If you proceed, ensure all students are reassigned to matching faculty advisors in the new department.`,
+          activeStudentCount: activeStudentCount,
+          requiresConfirmation: true,
+          proceedUrl: `?confirmDepartmentChange=true`
+        });
+      }
+    }
+    
     const result = await client.query(
       editFacultyByUserIdQuery,
       [input.fa_name, input.department, user_id]
     );
     if ((result.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Faculty advisor not found' });
-    res.status(200).json({ message: 'Faculty advisor updated', faculty: result.rows[0] });
+    
+    let warningMessage = null;
+    if (isDepartmentChanging) {
+      const activeStudentsRes = await client.query(countActiveStudentsByFacultyQuery, [currentFaculty.fa_id]);
+      const activeStudentCount = parseInt(activeStudentsRes.rows[0].active_student_count, 10);
+      if (activeStudentCount > 0) {
+        warningMessage = `⚠️ Department changed from '${currentFaculty.department}' to '${input.department}'. This faculty still has ${activeStudentCount} student(s) with department '${currentFaculty.department}'. Ensure these students are reassigned to matching faculty in the new department.`;
+      }
+    }
+    
+    const responseData: any = {
+      message: 'Faculty advisor updated',
+      faculty: result.rows[0]
+    };
+    
+    if (warningMessage) {
+      responseData.warning = warningMessage;
+    }
+    
+    res.status(200).json(responseData);
   } finally {
     client.release();
   }
