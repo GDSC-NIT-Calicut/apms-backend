@@ -1,7 +1,6 @@
 -- =========================================================================
 -- APMS DATABASE SCHEMA INITIALIZATION
--- REVISION: Removed all legacy views, added foreign key mutation tracking,
--- and stabilized atomic data state operations.
+-- REVISION: Standardized atomic metrics state computation tracking.
 -- =========================================================================
 
 -- 1. Drop existing objects in reverse dependency order
@@ -40,7 +39,6 @@ CREATE TABLE users (
 );
 
 -- 4. STUDENT table
--- Added lowercase constraint on department to eliminate backend routing mismatches
 CREATE TABLE students (
     roll_number VARCHAR(20) PRIMARY KEY,
     student_name VARCHAR(255) NOT NULL,
@@ -68,7 +66,6 @@ CREATE TABLE faculty_advisors (
 );
 
 -- 6. Student-Faculty Advisor mapping table
--- Fixed: Added ON UPDATE CASCADE to safely permit roll number corrections
 CREATE TABLE student_faculty_mapping (
     mapping_id SERIAL PRIMARY KEY,
     student_roll_number VARCHAR(20) NOT NULL REFERENCES students(roll_number) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -106,7 +103,6 @@ CREATE TABLE admins (
 );
 
 -- 10. STUDENT_POINTS table
--- Fixed: Added ON UPDATE CASCADE to safely track changing administrative edits
 CREATE TABLE student_points (
     point_id SERIAL PRIMARY KEY,
     student_roll_number VARCHAR(20) NOT NULL REFERENCES students(roll_number) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -125,12 +121,10 @@ CREATE TABLE student_points (
 -- DATA SEEDING: SYSTEM INVARIANTS & DUMMY MANAGEMENT PROFILES
 -- =========================================================================
 
--- Insert dummy user for fallback mapping routing
 INSERT INTO users (email, role)
 VALUES ('[email protected]', 'faculty_advisor')
 ON CONFLICT (email) DO NOTHING;
 
--- Seed default backup profiles per active college division
 INSERT INTO faculty_advisors (fa_name, user_id, department)
 SELECT 'no fa assigned', user_id, 'cs' FROM users WHERE email = '[email protected]' ON CONFLICT DO NOTHING;
 
@@ -163,7 +157,6 @@ CREATE INDEX idx_student_points_student ON student_points(student_roll_number);
 CREATE INDEX idx_student_points_status ON student_points(status);
 CREATE INDEX idx_student_points_event_type ON student_points(event_type);
 
--- Partial indexes enforcing core business uniqueness rules
 CREATE UNIQUE INDEX unique_approved_points_per_event_per_student ON student_points(student_roll_number, event_name) WHERE status = 'APPROVED';
 CREATE UNIQUE INDEX unique_pending_points_per_event_per_student ON student_points(student_roll_number, event_name) WHERE status = 'PENDING';
 
@@ -191,22 +184,22 @@ BEGIN
         IF NEW.status = 'APPROVED' THEN v_new_mult := 1; END IF;
     END IF;
 
-    -- Update execution pipeline
+    -- Update execution pipeline protected with explicit COALESCE fallbacks
     UPDATE students
     SET
-        total_points = total_points 
+        total_points = COALESCE(total_points, 0) 
             - (v_old_mult * OLD.points) 
             + (v_new_mult * NEW.points),
             
-        institute_level_points = institute_level_points 
+        institute_level_points = COALESCE(institute_level_points, 0) 
             - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'institute_level' THEN OLD.points ELSE 0 END)
             + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END),
             
-        department_level_points = department_level_points 
+        department_level_points = COALESCE(department_level_points, 0) 
             - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'department_level' THEN OLD.points ELSE 0 END)
             + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END),
             
-        fa_assigned_points = fa_assigned_points 
+        fa_assigned_points = COALESCE(fa_assigned_points, 0) 
             - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'fa_assigned' THEN OLD.points ELSE 0 END)
             + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END)
     WHERE roll_number = v_roll_number;
