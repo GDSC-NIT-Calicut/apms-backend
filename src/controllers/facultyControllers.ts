@@ -17,20 +17,21 @@ import { assertHasUser } from '../utils/assertions.js';
 // --- View all pending requests for students assigned to FA ---
 export const viewPendingRequests = async (req: Request, res: Response) => {
   assertHasUser(req);
-  const fa_user_id = req.user.user_id;
-  const result = await query(getFAPendingRequestsQuery, [fa_user_id]);
+  // 🌟 Changed variable name from fa_user_id to user_id to explicitly match token contents
+  const user_id = req.user.user_id; 
+  const result = await query(getFAPendingRequestsQuery, [user_id]);
   res.json(result.rows);
 };
 
 // --- Approve a student point request ---
 export const approveRequest = async (req: Request, res: Response) => {
   assertHasUser(req);
-  const fa_user_id = req.user.user_id;
+  const user_id = req.user.user_id; // 🌟 Consistent naming matching the users table
   const { point_id } = req.body;
   const client = await getClient();
   try {
     await client.query('BEGIN');
-    const result = await client.query(approveStudentPointRequestQuery, [point_id, fa_user_id]);
+    const result = await client.query(approveStudentPointRequestQuery, [point_id, user_id]);
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Request not found or not authorized' });
@@ -39,9 +40,8 @@ export const approveRequest = async (req: Request, res: Response) => {
     res.json({ message: 'Request approved', request: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Approve error:', err); // <--- Add this
+    console.error('Approve error:', err);
     res.status(500).json({ message: 'Error approving request' });
-
   } finally {
     client.release();
   }
@@ -50,12 +50,12 @@ export const approveRequest = async (req: Request, res: Response) => {
 // --- Reject a student point request ---
 export const rejectRequest = async (req: Request, res: Response) => {
   assertHasUser(req);
-  const fa_user_id = req.user.user_id;
+  const user_id = req.user.user_id; // 🌟 Consistent naming matching the users table
   const { point_id, rejection_reason } = req.body;
   const client = await getClient();
   try {
     await client.query('BEGIN');
-    const result = await client.query(rejectStudentPointRequestQuery, [point_id, rejection_reason, fa_user_id]);
+    const result = await client.query(rejectStudentPointRequestQuery, [point_id, rejection_reason, user_id]);
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Request not found or not authorized' });
@@ -64,6 +64,7 @@ export const rejectRequest = async (req: Request, res: Response) => {
     res.json({ message: 'Request rejected', request: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Reject error:', err);
     res.status(500).json({ message: 'Error rejecting request' });
   } finally {
     client.release();
@@ -91,8 +92,8 @@ export const downloadProofDocument = async (req: Request, res: Response) => {
 // --- View status of all students assigned to FA ---
 export const viewStudentStatus = async (req: Request, res: Response) => {
   assertHasUser(req);
-  const fa_user_id = req.user.user_id;
-  const result = await query(getFAStudentStatusQuery, [fa_user_id]);
+  const user_id = req.user.user_id; // 🌟 Consistent naming matching the users table
+  const result = await query(getFAStudentStatusQuery, [user_id]);
   res.json(result.rows);
 };
 
