@@ -157,8 +157,9 @@ CREATE INDEX idx_student_points_student ON student_points(student_roll_number);
 CREATE INDEX idx_student_points_status ON student_points(status);
 CREATE INDEX idx_student_points_event_type ON student_points(event_type);
 
-CREATE UNIQUE INDEX unique_approved_points_per_event_per_student ON student_points(student_roll_number, event_name) WHERE status = 'APPROVED';
-CREATE UNIQUE INDEX unique_pending_points_per_event_per_student ON student_points(student_roll_number, event_name) WHERE status = 'PENDING';
+-- 🌟 FIXED INDEXES: Enforces scoped uniqueness scoped strictly per student per distinct date
+CREATE UNIQUE INDEX unique_approved_points_per_event_per_student ON student_points(student_roll_number, event_name, event_date) WHERE status = 'APPROVED';
+CREATE UNIQUE INDEX unique_pending_points_per_event_per_student ON student_points(student_roll_number, event_name, event_date) WHERE status = 'PENDING';
 
 -- =========================================================================
 -- STATE SYNCHRONIZATION ENGINE (TRIGGERS & CALCULATION LOGIC)
