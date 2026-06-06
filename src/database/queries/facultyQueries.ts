@@ -3,6 +3,11 @@
 // =========================================================================
 
 // 1. Fixed Pending Requests Query (Added FA table join & Aliased fields for your Frontend)
+export const getFacultyDetailsQuery = `
+  SELECT f.fa_id, f.fa_name, f.department
+  FROM faculty_advisors f
+  WHERE f.user_id = $1
+`;
 export const getFAPendingRequestsQuery = `
 SELECT 
     sp.point_id,
