@@ -157,7 +157,7 @@ CREATE INDEX idx_student_points_student ON student_points(student_roll_number);
 CREATE INDEX idx_student_points_status ON student_points(status);
 CREATE INDEX idx_student_points_event_type ON student_points(event_type);
 
--- 🌟 FIXED INDEXES: Enforces scoped uniqueness scoped strictly per student per distinct date
+-- Enforces uniqueness constraints scoped strictly per student per distinct calendar date
 CREATE UNIQUE INDEX unique_approved_points_per_event_per_student ON student_points(student_roll_number, event_name, event_date) WHERE status = 'APPROVED';
 CREATE UNIQUE INDEX unique_pending_points_per_event_per_student ON student_points(student_roll_number, event_name, event_date) WHERE status = 'PENDING';
 
@@ -169,40 +169,38 @@ CREATE OR REPLACE FUNCTION update_student_point_totals_unified()
 RETURNS TRIGGER AS $$
 DECLARE
     v_roll_number VARCHAR(20);
-    v_old_mult INT := 0;
-    v_new_mult INT := 0;
+    v_old_points INT := 0;
+    v_new_points INT := 0;
 BEGIN
-    -- Determine target operational boundary sets
+    -- Isolate metric integers securely based on execution block to avoid NULL calculation overrides
     IF TG_OP = 'DELETE' THEN
         v_roll_number := OLD.student_roll_number;
-        IF OLD.status = 'APPROVED' THEN v_old_mult := 1; END IF;
+        IF OLD.status = 'APPROVED' THEN v_old_points := OLD.points; END IF;
     ELSIF TG_OP = 'INSERT' THEN
         v_roll_number := NEW.student_roll_number;
-        IF NEW.status = 'APPROVED' THEN v_new_mult := 1; END IF;
+        IF NEW.status = 'APPROVED' THEN v_new_points := NEW.points; END IF;
     ELSIF TG_OP = 'UPDATE' THEN
         v_roll_number := NEW.student_roll_number;
-        IF OLD.status = 'APPROVED' THEN v_old_mult := 1; END IF;
-        IF NEW.status = 'APPROVED' THEN v_new_mult := 1; END IF;
+        IF OLD.status = 'APPROVED' THEN v_old_points := OLD.points; END IF;
+        IF NEW.status = 'APPROVED' THEN v_new_points := NEW.points; END IF;
     END IF;
 
-    -- Update execution pipeline protected with explicit COALESCE fallbacks
+    -- Synchronize updates across master aggregate table layout
     UPDATE students
     SET
-        total_points = COALESCE(total_points, 0) 
-            - (v_old_mult * OLD.points) 
-            + (v_new_mult * NEW.points),
+        total_points = COALESCE(total_points, 0) - v_old_points + v_new_points,
             
         institute_level_points = COALESCE(institute_level_points, 0) 
-            - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'institute_level' THEN OLD.points ELSE 0 END)
-            + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'institute_level' THEN NEW.points ELSE 0 END),
+            - (CASE WHEN TG_OP <> 'INSERT' AND OLD.event_type = 'institute_level' AND OLD.status = 'APPROVED' THEN OLD.points ELSE 0 END)
+            + (CASE WHEN TG_OP <> 'DELETE' AND NEW.event_type = 'institute_level' AND NEW.status = 'APPROVED' THEN NEW.points ELSE 0 END),
             
         department_level_points = COALESCE(department_level_points, 0) 
-            - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'department_level' THEN OLD.points ELSE 0 END)
-            + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'department_level' THEN NEW.points ELSE 0 END),
+            - (CASE WHEN TG_OP <> 'INSERT' AND OLD.event_type = 'department_level' AND OLD.status = 'APPROVED' THEN OLD.points ELSE 0 END)
+            + (CASE WHEN TG_OP <> 'DELETE' AND NEW.event_type = 'department_level' AND NEW.status = 'APPROVED' THEN NEW.points ELSE 0 END),
             
         fa_assigned_points = COALESCE(fa_assigned_points, 0) 
-            - (CASE WHEN v_old_mult = 1 AND OLD.event_type = 'fa_assigned' THEN OLD.points ELSE 0 END)
-            + (CASE WHEN v_new_mult = 1 AND NEW.event_type = 'fa_assigned' THEN NEW.points ELSE 0 END)
+            - (CASE WHEN TG_OP <> 'INSERT' AND OLD.event_type = 'fa_assigned' AND OLD.status = 'APPROVED' THEN OLD.points ELSE 0 END)
+            + (CASE WHEN TG_OP <> 'DELETE' AND NEW.event_type = 'fa_assigned' AND NEW.status = 'APPROVED' THEN NEW.points ELSE 0 END)
     WHERE roll_number = v_roll_number;
 
     RETURN NULL;
