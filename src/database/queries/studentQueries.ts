@@ -4,10 +4,10 @@ export const getStudentDetailsQuery = `
     s.student_name, 
     s.department, 
     s.program,  
-    s.total_points, 
-    s.department_level_points, 
-    s.institute_level_points,
-    s.fa_assigned_points, 
+    COALESCE(s.total_points, 0) AS total_points, 
+    COALESCE(s.department_level_points, 0) AS department_level_points, 
+    COALESCE(s.institute_level_points, 0) AS institute_level_points,
+    COALESCE(s.fa_assigned_points, 0) AS fa_assigned_points, 
     s.graduation_eligible,
     fa.fa_name AS faculty_advisor_name
   FROM students s
