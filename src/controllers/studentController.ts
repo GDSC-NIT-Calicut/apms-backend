@@ -82,7 +82,7 @@ export const downloadProofDocument = async (req: Request, res: Response) => {
     }
 
     // Serve file safely
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(absoluteFilePath)}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(absoluteFilePath)}"`);
     res.setHeader('Content-Type', 'application/pdf');
     return res.sendFile(absoluteFilePath);
   } catch (err: any) {

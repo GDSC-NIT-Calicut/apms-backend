@@ -81,7 +81,7 @@ export const downloadProofDocument = async (req: Request, res: Response) => {
   const filePath = path.resolve(result.rows[0].proof_document);
   try {
     await fs.access(filePath);
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
     res.setHeader('Content-Type', 'application/pdf');
     res.sendFile(filePath);
   } catch {
